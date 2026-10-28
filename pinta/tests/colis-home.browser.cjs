@@ -23,10 +23,14 @@ const PARIS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', y
 const parisDay = offset => PARIS_DAY.format(new Date(NOW + offset * 86400000));
 const uuid = n => `c0115000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const CLIENT = { abdallah: uuid(101), boyer: uuid(102), grondin: uuid(103), hoarau: uuid(104), payet: uuid(105), riviere: uuid(106), techer: uuid(107), lebon: uuid(108), fontaine: uuid(109), maillot: uuid(110), dupont: uuid(111) };
-const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211), techer2: uuid(212) };
+const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211), techer2: uuid(212), dupont: uuid(213), request: uuid(214), lines: uuid(215) };
 const E = { past: uuid(300), soon: uuid(301), mayotte: uuid(302), later: uuid(303) };
 const NOTICE = { riviere: uuid(401), techer: uuid(402) };
 const MESSAGE = { riviere: uuid(501), techer: uuid(502) };
+// A colleague of the team, and the reception task she holds (staff_work_actions).
+const COLLEAGUE = uuid(1401);
+const COLLEAGUE_USER = { id: uuid(1402), auth_id: COLLEAGUE, role: 'preparateur', nom: 'Martin', prenom: 'Lucie', email: 'lucie.martin@example.test', actif: true, must_change_password: false, staff_permissions: [] };
+const heldTask = colisId => ({ id: uuid(1403), colis_id: colisId, kind: 'reception', state: 'in_progress', assignee_id: COLLEAGUE, version: 3, action_hint: 'Demander l’accord', created_at: ago(0, 1), updated_at: ago(0, 1) });
 const RIVIERE_TEXT = 'Bonjour Marie-Claude,\n\nBonne nouvelle : nous avons reçu 2 colis pour vous à notre entrepôt de Paris. Nous vous tenons au courant à chaque étape.\n\nLe détail :\n1. Zara — ZARA-889 — 30 × 20 × 10 cm — 0,9 kg\n2. Amazon — TBA 3021 8876 5410 — 45 × 35 × 25 cm — 3,6 kg\n\nProchaine étape : avant toute préparation, nous vous demanderons votre accord. Vous pourrez alors autoriser la préparation ou choisir d’attendre vos autres achats. Après votre accord, notre équipe prépare et optimise votre envoi, puis vous recevrez le devis.\n\nCordialement,\nL’équipe Expedîle';
 
 // A 48 × 36 PNG (a carton-coloured gradient) served for the private reception photos.
@@ -186,8 +190,16 @@ registerRequestMock(({ url, method, input, tables }) => {
   }
   if (rpc === 'queue_message') {
     tables.queue_calls.push(input);
+    // The same key gives back the same message (idempotency): « Réessayer cet envoi » records nothing twice.
+    tables.queued = tables.queued || {};
+    if (input.p_idempotency_key && tables.queued[input.p_idempotency_key]) return [200, tables.queued[input.p_idempotency_key]];
     const parcel = tables.colis.find(row => row.id === input.p_colis_id);
     if (!parcel) return [400, { message: 'Colis introuvable' }];
+    // A colleague holds the reception task (_assert_staff_task_owner): refused, nothing recorded.
+    if (tables.heldBy && ['demande_feu_vert', 'relance_feu_vert'].includes(input.p_template)) {
+      if (tables.heldTask) tables.staff_work_actions = [...(tables.staff_work_actions || []).filter(item => item.id !== tables.heldTask.id), tables.heldTask];
+      return [409, { code: '40001', message: `Cette tâche est suivie par ${tables.heldBy}. Vos saisies sont conservées : demandez un relais ou actualisez la tâche avant de poursuivre.` }];
+    }
     if (['demande_feu_vert', 'relance_feu_vert'].includes(input.p_template) && input.p_expected_consent_version !== parcel.consent_request_version)
       return [409, { code: '40001', message: 'La demande a changé. Préparez un nouvel aperçu avant de l’envoyer.' }];
     const at = new Date().toISOString();
@@ -195,12 +207,20 @@ registerRequestMock(({ url, method, input, tables }) => {
     tables.messages.push(message);
     if (input.p_template === 'demande_feu_vert') Object.assign(parcel, { statut: 'attente_feu_vert', feu_vert: 'en_attente', demande_feu_vert_envoyee_at: at });
     parcel.updated_at = at;
-    return [200, { message, outbox: { id: uuid(1100 + tables.queue_calls.length), status: 'pending' } }];
+    const result = { message, outbox: { id: uuid(1100 + tables.queue_calls.length), status: 'pending' } };
+    if (input.p_idempotency_key) tables.queued[input.p_idempotency_key] = result;
+    return [200, result];
   }
   if (url.pathname.endsWith('/functions/v1/send-telegram')) {
     tables.telegram_calls.push(input);
     const at = new Date().toISOString();
     const message = tables.messages.find(row => row.id === input?.messageId);
+    // Telegram does not answer: the message stays recorded, not delivered.
+    if (tables.failTelegram > 0 && message) {
+      tables.failTelegram -= 1;
+      Object.assign(message, { statut: 'echec', notification_outbox: [{ status: 'failed', sent_at: null }] });
+      return [200, { ok: false, error: 'Telegram n’a pas répondu : le message reste dans la file d’envoi.' }];
+    }
     if (message) Object.assign(message, { statut: 'envoye', notification_outbox: [{ status: 'sent', sent_at: at }] });
     const notice = tables.arrival_notices.find(row => row.message?.id === input?.messageId);
     if (notice) {
@@ -235,10 +255,11 @@ function grant(f, values) {
 async function setTheme(f, theme) {
   await f.page.evaluate(value => localStorage.setItem('expedile-theme', value), theme);
 }
-/** Text under 15 px, targets under 44 px and a horizontal scroll, in the page content (<main>). */
-async function readability(page) {
-  return page.evaluate(() => {
-    const root = document.querySelector('main');
+/** Text under 15 px, targets under 44 px and a horizontal scroll, in the page content (<main>) or another part of
+ * the page (the message sheet, a dialog). */
+async function readability(page, rootSelector = 'main') {
+  return page.evaluate(rootSelector => {
+    const root = document.querySelector(rootSelector);
     const visible = element => {
       if (element.closest('.sr-only, [aria-hidden="true"]')) return false;
       const style = getComputedStyle(element);
@@ -260,17 +281,17 @@ async function readability(page) {
       if (rect.height < 44 || rect.width < 44) tiny.push(`${Math.round(rect.width)}×${Math.round(rect.height)} « ${(element.getAttribute('aria-label') || element.textContent || element.tagName).trim().slice(0, 50)} »`);
     }
     return { small, tiny, overflow: document.documentElement.scrollWidth > window.innerWidth + 1 || root.scrollWidth > root.clientWidth + 1, h1: document.querySelectorAll('h1').length };
-  });
+  }, rootSelector);
 }
-async function assertReadable(f, label) {
-  const measure = await readability(f.page);
+async function assertReadable(f, label, root = 'main') {
+  const measure = await readability(f.page, root);
   assert.deepEqual(measure.small, [], `${label}: text of 15 px at least`);
   assert.deepEqual(measure.tiny, [], `${label}: targets of 44 px at least`);
   assert.equal(measure.overflow, false, `${label}: no horizontal scroll`);
   assert.equal(measure.h1, 1, `${label}: one h1`);
 }
-async function assertAccessible(f, label) {
-  const audit = await new AxeBuilder({ page: f.page }).include('main').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+async function assertAccessible(f, label, root = 'main') {
+  const audit = await new AxeBuilder({ page: f.page }).include(root).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   assert.deepEqual(audit.violations.map(violation => ({ id: violation.id, nodes: violation.nodes.slice(0, 4).map(node => `${node.target} ${node.failureSummary || ''}`.slice(0, 220)) })), [], `${label}: axe`);
 }
 /** innerText with every space, no-break space and line break as one space. */
@@ -328,7 +349,7 @@ async function main() {
       await run(f);
       assert.deepEqual(f.errors, [], 'No page error.');
       assert.deepEqual(f.networkDenied, [], 'No request outside the mocked server.');
-      assert.deepEqual(consoleErrors.filter(text => !((failTable || failedRequests) && /^Failed to load resource: the server responded with a status of 503/.test(text))), [], 'No console error.');
+      assert.deepEqual(consoleErrors.filter(text => !((failTable || failedRequests) && /^Failed to load resource: the server responded with a status of (409|503)/.test(text))), [], 'No console error.');
       results.push({ test: name, pass: true });
     } catch (error) {
       process.exitCode = 1;
@@ -367,7 +388,7 @@ async function main() {
       assert.match(totals, /^En stock, devis pas encore envoyé · 7 clients · 19 cartons · [\d,]+ kg · [\d,]+ m³$/);
       // One alert, one link to what is to do.
       const reception = f.page.getByRole('link', { name: 'Réception à valider : 1 carton Valider et prévenir', exact: true });
-      assert.equal(await reception.getAttribute('href'), `/recevoir?client=${CLIENT.techer}&valider=1`);
+      assert.equal(await reception.getAttribute('href'), `/recevoir?client=${CLIENT.techer}&valider=1&returnTo=%2F`);
       const notices = f.page.getByRole('link', { name: '1 avis d’arrivée non remis Voir les avis', exact: true });
       assert.equal(await notices.getAttribute('href'), '/avis');
       // A table with its headers.
@@ -470,7 +491,7 @@ async function main() {
       assert.equal(await href('grondin', 'Envoyer le devis'), `/colis/${D.grondin}?returnTo=${back}&section=devis#dossier-work`);
       assert.equal(await href('hoarau', 'Ajouter la facture'), `/colis/${D.hoarau}?returnTo=${back}&section=documents#dossier-work`);
       assert.equal(await href('payet', 'Préparer'), `/colis/${D.payet}?returnTo=${back}&section=preparation#dossier-work`);
-      assert.equal(await href('techer', 'Valider la réception'), `/recevoir?client=${CLIENT.techer}&valider=1`);
+      assert.equal(await href('techer', 'Valider la réception'), `/recevoir?client=${CLIENT.techer}&valider=1&returnTo=${back}`);
       // The client's name opens the Brouillon sheet; the action opens the dossier task.
       assert.equal(await rowOf(f, D.payet).getByRole('link', { name: 'Payet Flavie', exact: true }).getAttribute('href'), `/brouillon/${D.payet}?returnTo=${back}`);
       await rowOf(f, D.payet).getByRole('link', { name: 'Préparer', exact: true }).click();
@@ -483,59 +504,182 @@ async function main() {
       noSend(f);
     });
 
-    await scenario('consent-request-panel-sends-in-place', async f => {
+    await scenario('consent-request-sheet-sends-then-says-it-on-the-line', async f => {
       await openHome(f);
       const row = rowOf(f, D.abdallah);
       const trigger = row.getByRole('button', { name: 'Demander l’accord', exact: true });
+      assert.equal(await trigger.getAttribute('aria-haspopup'), 'dialog');
       await trigger.click();
-      const panel = f.page.getByRole('region', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
-      await panel.waitFor();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
+      await sheet.waitFor();
       assert.equal(await trigger.getAttribute('aria-expanded'), 'true');
-      assert.equal(await panel.evaluate(element => element === document.activeElement), true, 'The panel takes the focus.');
-      const message = panel.getByLabel('Message à envoyer au client', { exact: true });
+      assert.equal(await trigger.getAttribute('aria-controls'), await sheet.getAttribute('id'));
+      assert.equal(await sheet.evaluate(element => element.contains(document.activeElement)), true, 'The sheet takes the focus.');
+      const message = sheet.getByLabel('Message à envoyer au client', { exact: true });
       await message.waitFor();
       assert.match(await message.inputValue(), /MAY-0001/);
-      assert.equal(await panel.getByLabel('Canal de notification', { exact: true }).inputValue(), 'telegram');
-      assert.equal(f.tables.queue_calls.length, 0, 'Opening the panel sends nothing.');
-      await assertReadable(f, 'consent panel');
-      await assertAccessible(f, 'consent panel');
-      await shot(f, 'colis-tablette-panneau-accord');
+      assert.equal(await sheet.getByLabel('Canal de notification', { exact: true }).inputValue(), 'telegram');
+      assert.equal(f.tables.queue_calls.length, 0, 'Opening the sheet sends nothing.');
+      await assertReadable(f, 'consent sheet', '[role="dialog"]');
+      await assertAccessible(f, 'consent sheet', '[role="dialog"]');
+      await shot(f, 'colis-tablette-feuille-accord', false);
       const reads = () => f.tables.signal_calls.filter(call => call.rpc === 'list_pending_receptions').length;
       const readsBefore = reads();
-      await panel.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
-      await panel.getByText('Message livré à Telegram.', { exact: true }).waitFor();
+      await sheet.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
+      // Sent: the sheet closes and the line says so. Nothing else to send seconds after the request.
+      await sheet.waitFor({ state: 'detached' });
+      await row.getByText('Demande d’accord envoyée : Telegram a confirmé', { exact: true }).waitFor();
       assert.equal(f.tables.queue_calls.length, 1);
       const [queued] = f.tables.queue_calls;
       assert.deepEqual([queued.p_colis_id, queued.p_template, queued.p_canal, queued.p_expected_consent_version], [D.abdallah, 'demande_feu_vert', 'telegram', 0]);
       assert.ok(queued.p_reply_markup.inline_keyboard.some(line => line.some(button => button.callback_data === `fv_oui_${D.abdallah}`)));
-      assert.equal(f.tables.telegram_calls.length, 1);
-      assert.equal(f.tables.telegram_calls[0].colisId, D.abdallah);
-      assert.equal(f.tables.telegram_calls[0].messageId, f.tables.messages[f.tables.messages.length - 1].id);
-      // The line now says where the dossier is: the client is asked, nothing to do.
+      assert.deepEqual(f.tables.telegram_calls.map(call => [call.colisId, call.messageId]), [[D.abdallah, f.tables.messages[f.tables.messages.length - 1].id]]);
       await row.getByText('Attend le client', { exact: true }).waitFor();
-      await row.getByText('Rien à faire', { exact: true }).waitFor();
+      assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0, 'No relance right after the request.');
+      assert.equal(await row.getByRole('link', { name: 'Abdallah Mohamed', exact: true }).evaluate(element => element === document.activeElement), true, 'The focus returns to the line.');
+      await shot(f, 'colis-tablette-accord-envoye', false);
       // The dossier changed in the loaded data (no window event): the receptions and notices are read again.
       for (let wait = 0; wait < 40 && reads() <= readsBefore; wait += 1) await f.page.waitForTimeout(250);
       assert.ok(reads() > readsBefore, 'A change of the loaded dossiers is followed by a new read.');
-      await panel.getByRole('button', { name: 'Fermer', exact: true }).click();
-      await panel.waitFor({ state: 'detached' });
-      assert.equal(await row.getByRole('link', { name: 'Abdallah Mohamed', exact: true }).evaluate(element => element === document.activeElement), true, 'The focus returns to the line.');
+      // Closed without sending: « Fermer », a click beside the sheet, Escape; nothing sent, the focus back on the action.
+      await openHome(f);
+      for (const close of [
+        () => f.page.getByRole('dialog').getByRole('button', { name: 'Fermer', exact: true }).click(),
+        () => f.page.mouse.click(40, 300),
+        () => f.page.keyboard.press('Escape'),
+      ]) {
+        await rowOf(f, D.boyer).getByRole('button', { name: 'Relancer', exact: true }).click();
+        await f.page.getByRole('dialog', { name: 'Relancer · Boyer Sandrine', exact: true }).getByLabel('Message à envoyer au client', { exact: true }).waitFor();
+        await close();
+        await f.page.getByRole('dialog').waitFor({ state: 'detached' });
+        await f.page.waitForFunction(() => document.activeElement?.matches?.('[data-action="relancer"]'));
+      }
+      assert.equal(f.tables.queue_calls.length, 1, 'Closing sends nothing.');
     });
 
-    await scenario('relance-panel-on-phone-dark', async f => {
+    await scenario('relance-sheet-on-phone-dark', async f => {
       await openHome(f);
       const row = rowOf(f, D.boyer);
       await row.getByRole('button', { name: 'Relancer', exact: true }).click();
-      const panel = f.page.getByRole('region', { name: 'Relancer · Boyer Sandrine', exact: true });
-      await panel.getByLabel('Message à envoyer au client', { exact: true }).waitFor();
-      await assertReadable(f, 'phone relance panel');
-      await assertAccessible(f, 'phone relance panel (dark)');
-      await shot(f, 'colis-telephone-sombre-relance');
-      await panel.getByRole('button', { name: 'Envoyer ce message', exact: true }).click();
-      await panel.getByText('Message livré à Telegram.', { exact: true }).waitFor();
+      const sheet = f.page.getByRole('dialog', { name: 'Relancer · Boyer Sandrine', exact: true });
+      await sheet.getByLabel('Message à envoyer au client', { exact: true }).waitFor();
+      await assertReadable(f, 'phone relance sheet', '[role="dialog"]');
+      await assertAccessible(f, 'phone relance sheet (dark)', '[role="dialog"]');
+      // From the bottom of the screen, never wider than it.
+      const box = await sheet.boundingBox();
+      assert.ok(Math.abs(box.y + box.height - 844) <= 1 && box.width <= 390, JSON.stringify(box));
+      await shot(f, 'colis-telephone-sombre-relance', false);
+      await sheet.getByRole('button', { name: 'Envoyer ce message', exact: true }).click();
+      await sheet.waitFor({ state: 'detached' });
+      await row.getByText('Relance envoyée : Telegram a confirmé', { exact: true }).waitFor();
       assert.deepEqual(f.tables.queue_calls.map(call => [call.p_colis_id, call.p_template, call.p_expected_consent_version]), [[D.boyer, 'relance_feu_vert', 1]]);
-      await row.getByText('Rien à faire', { exact: true }).waitFor();
+      await row.getByText('Attend le client', { exact: true }).waitFor();
+      assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0);
     }, { device: PHONE, theme: 'dark' });
+
+    await scenario('request-not-confirmed-keeps-its-message', async f => {
+      await openHome(f);
+      const row = rowOf(f, D.abdallah);
+      await row.getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
+      await sheet.getByLabel('Message à envoyer au client', { exact: true }).waitFor();
+      await sheet.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
+      // Recorded, not delivered: the dossier left « Accord à demander », the same message stays, to send as it is.
+      const again = sheet.getByRole('button', { name: 'Réessayer cet envoi', exact: true });
+      await again.waitFor();
+      await sheet.getByText(/^Telegram n’a pas répondu/).waitFor();
+      await row.getByText('Accord à demander', { exact: true }).waitFor({ state: 'detached' });
+      assert.equal(await sheet.getByRole('button', { name: 'Préparer une relance', exact: true }).count(), 0, 'No relance while the request is not confirmed.');
+      assert.match(await sheet.getByLabel('Message à envoyer au client', { exact: true }).inputValue(), /MAY-0001/);
+      await shot(f, 'colis-tablette-envoi-non-confirme', false);
+      // Closing would lose « Réessayer cet envoi »: asked first.
+      await f.page.keyboard.press('Escape');
+      const confirm = f.page.getByRole('dialog', { name: 'Fermer sans confirmation de l’envoi ?', exact: true });
+      await confirm.waitFor();
+      await confirm.getByRole('button', { name: 'Annuler', exact: true }).click();
+      await confirm.waitFor({ state: 'detached' });
+      // The same message and key: sent at last, recorded once.
+      await again.click();
+      await sheet.waitFor({ state: 'detached' });
+      await row.getByText('Demande d’accord envoyée : Telegram a confirmé', { exact: true }).waitFor();
+      assert.equal(f.tables.queue_calls.length, 2);
+      assert.equal(f.tables.queue_calls[1].p_idempotency_key, f.tables.queue_calls[0].p_idempotency_key);
+      assert.equal(f.tables.queue_calls[1].p_text, f.tables.queue_calls[0].p_text);
+      assert.equal(f.tables.messages.filter(item => item.colis_id === D.abdallah && item.template === 'demande_feu_vert').length, 1);
+      assert.equal(f.tables.telegram_calls.length, 2);
+    }, { prepare: f => { f.tables.failTelegram = 1; } });
+
+    await scenario('sheet-keeps-its-message-when-the-phone-turns', async f => {
+      await openHome(f);
+      await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
+      const message = sheet.getByLabel('Message à envoyer au client', { exact: true });
+      await message.waitFor();
+      await message.fill(`${await message.inputValue()}\nMerci de nous répondre avant vendredi.`);
+      await assertReadable(f, 'phone consent sheet', '[role="dialog"]');
+      await shot(f, 'colis-telephone-feuille-accord', false);
+      // Landscape: the cards become a table, the sheet keeps its message as written.
+      await f.page.setViewportSize({ width: 844, height: 390 });
+      await f.page.locator('table.colis-table').waitFor();
+      assert.match(await message.inputValue(), /Merci de nous répondre avant vendredi\.$/);
+      assert.equal(await f.page.getByRole('dialog').count(), 1);
+      await assertReadable(f, 'landscape consent sheet', '[role="dialog"]');
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await f.page.locator('ul.colis-cards').first().waitFor();
+      assert.match(await message.inputValue(), /Merci de nous répondre avant vendredi\.$/);
+      // Its line leaves the list (another search, the browser's history): the sheet and its message stay.
+      await f.page.evaluate(() => { history.pushState({}, '', '/?q=Boyer'); window.dispatchEvent(new PopStateEvent('popstate')); });
+      await rowOf(f, D.abdallah).waitFor({ state: 'detached' });
+      assert.match(await message.inputValue(), /Merci de nous répondre avant vendredi\.$/);
+      await sheet.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
+      await sheet.waitFor({ state: 'detached' });
+      assert.match(f.tables.queue_calls[0].p_text, /Merci de nous répondre avant vendredi\.$/);
+    }, { device: PHONE });
+
+    await scenario('client-without-any-channel-is-sent-to-its-record', async f => {
+      await openHome(f);
+      await rowOf(f, D.dupont).getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Dupont Paul', exact: true });
+      const said = sheet.getByTestId('feuille-sans-canal');
+      await said.waitFor();
+      assert.match(await flat(said), /^Dupont Paul ne peut pas encore recevoir ce message : ni Telegram relié, ni adresse e-mail, ni espace client\. Ajoutez son adresse e-mail/);
+      assert.equal(await sheet.getByRole('link', { name: 'Ouvrir la fiche de Dupont Paul', exact: true }).getAttribute('href'), `/clients/${CLIENT.dupont}`);
+      assert.equal(await sheet.getByLabel('Message à envoyer au client', { exact: true }).count(), 0, 'No message to write to nobody.');
+      await assertReadable(f, 'no channel', '[role="dialog"]');
+      await assertAccessible(f, 'no channel', '[role="dialog"]');
+      await shot(f, 'colis-tablette-sans-canal', false);
+      noSend(f);
+    }, { prepare: f => {
+      f.tables.colis.push(dossier(D.dupont, CLIENT.dupont, 'EXP-TEST-113', 'mesure', [carton('DUP-2', 'Fnac', 30, 20, 20, 2)], { casier: 'H-02', reception_dates: received([1], 1) }));
+    } });
+
+    await scenario('colleague-refusal-leaves-no-retry-doomed-to-fail', async f => {
+      await openHome(f);
+      await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
+      await sheet.getByLabel('Message à envoyer au client', { exact: true }).waitFor();
+      const workReads = () => f.requests.filter(request => request.path.endsWith('/refresh_staff_work_actions')).length;
+      const before = workReads();
+      await sheet.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
+      // A colleague took the task meanwhile: said plainly, nothing to send again from here.
+      const held = sheet.getByTestId('feuille-collegue');
+      await held.getByText('Le message n’a pas été envoyé : Lucie Martin suit l’accord de ce dossier. Rien n’est parti chez le client.', { exact: true }).waitFor();
+      assert.equal(await sheet.getByRole('button', { name: /Réessayer|Envoyer/ }).count(), 0, 'No « Réessayer » doomed to fail.');
+      assert.equal(await held.getByRole('link', { name: 'Ouvrir l’accord du client', exact: true }).getAttribute('href'), `/colis/${D.abdallah}?${new URLSearchParams({ returnTo: '/', section: 'accord' })}#dossier-work`);
+      for (let wait = 0; wait < 20 && workReads() <= before; wait += 1) await f.page.waitForTimeout(100);
+      assert.ok(workReads() > before, 'The tasks are read again: the list learns who holds this one.');
+      assert.equal(f.tables.telegram_calls.length, 0);
+      await assertReadable(f, 'colleague refusal', '[role="dialog"]');
+      await assertAccessible(f, 'colleague refusal', '[role="dialog"]');
+      await shot(f, 'colis-tablette-refus-collegue', false);
+      // Nothing was recorded: closing asks nothing.
+      await sheet.getByRole('button', { name: 'Fermer', exact: true }).click();
+      await sheet.waitFor({ state: 'detached' });
+    }, { failedRequests: true, prepare: f => {
+      f.tables.staff_users.push(COLLEAGUE_USER);
+      f.tables.heldBy = 'Lucie Martin';
+      f.tables.heldTask = heldTask(D.abdallah);
+    } });
 
     await scenario('phone-list-light-and-dark', async f => {
       for (const theme of ['light', 'dark']) {
@@ -581,9 +725,11 @@ async function main() {
         const price = await flat(action);
         for (const part of [/Transport\s+109,00 €/, /Poids facturé : 16,8 kg/, /Taxes à l’importation estimées\s+49,14 €/, /payées à l’arrivée, comprises dans le prix/, /dont estimation octroi de mer de La Réunion\s+29,22 €/,
           /dont estimation octroi de mer régional de La Réunion\s+7,53 €/, /dont estimation TVA à l’importation de La Réunion\s+12,39 €/, /Total à payer\s+158,14 €/, /Économie réalisée grâce à l’optimisation : 60,72 €/]) assert.match(price, part);
-        assert.equal(await action.getByRole('link', { name: 'Envoyer le devis', exact: true }).getAttribute('href'), `/colis/${D.riviere}?returnTo=%2Fbrouillon%2F${D.riviere}&section=devis#dossier-work`);
-        assert.equal(await action.getByRole('link', { name: 'Tout le dossier', exact: true }).getAttribute('href'), `/colis/${D.riviere}?returnTo=%2Fbrouillon%2F${D.riviere}`);
-        assert.equal(await action.getByRole('link', { name: 'Ajouter un carton', exact: true }).getAttribute('href'), `/recevoir?dossier=${D.riviere}`);
+        // The pages it opens come back to this sheet, which goes back to the list as it was.
+        const self = `/brouillon/${D.riviere}?${new URLSearchParams({ returnTo: '/?classer=depart' })}`;
+        assert.equal(await action.getByRole('link', { name: 'Envoyer le devis', exact: true }).getAttribute('href'), `/colis/${D.riviere}?${new URLSearchParams({ returnTo: self, section: 'devis' })}#dossier-work`);
+        assert.equal(await action.getByRole('link', { name: 'Tout le dossier', exact: true }).getAttribute('href'), `/colis/${D.riviere}?${new URLSearchParams({ returnTo: self })}`);
+        assert.equal(await action.getByRole('link', { name: 'Ajouter un carton', exact: true }).getAttribute('href'), `/recevoir?${new URLSearchParams({ dossier: D.riviere, returnTo: self })}`);
         // Cartons received, then after optimisation and the volume gained.
         const receivedTable = f.page.getByTestId('fiche-recus').getByRole('table');
         assert.equal(await receivedTable.locator('tbody tr:not(.fiche-photo-row)').count(), 5);
@@ -649,7 +795,8 @@ async function main() {
       await f.page.goto(`${base}/brouillon/${D.techer}?returnTo=${encodeURIComponent('/?onglet=brouillon')}`);
       await f.page.getByRole('heading', { level: 1, name: 'Técher Johnny', exact: true }).waitFor();
       const action = f.page.getByTestId('fiche-action');
-      assert.equal(await action.getByRole('link', { name: 'Valider la réception', exact: true }).getAttribute('href'), `/recevoir?client=${CLIENT.techer}&valider=1`);
+      const self = `/brouillon/${D.techer}?${new URLSearchParams({ returnTo: '/?onglet=brouillon' })}`;
+      assert.equal(await action.getByRole('link', { name: 'Valider la réception', exact: true }).getAttribute('href'), `/recevoir?${new URLSearchParams({ client: CLIENT.techer, valider: '1', returnTo: self })}`);
       // Without a saved quote: what the quote still needs, never a price.
       assert.equal(await action.getByTestId('fiche-prix-etat').innerText(), 'À calculer');
       assert.match(await flat(action), /Pour calculer le devis, il manque : Accord du client Mesures après optimisation/);
@@ -780,6 +927,175 @@ async function main() {
       });
     } });
 
+    await scenario('list-context-comes-back-through-the-sheet-and-the-dossier', async f => {
+      const list = '/?onglet=a_payer&q=Lebon';
+      await openHome(f, '?onglet=a_payer&q=Lebon');
+      await rowOf(f, D.lebon).getByRole('link', { name: 'Lebon Marc', exact: true }).click();
+      await f.page.waitForURL(url => url.pathname === `/brouillon/${D.lebon}`);
+      assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), list);
+      // Every page the sheet opens comes back to it, with the way back to the list.
+      const self = `/brouillon/${D.lebon}?${new URLSearchParams({ returnTo: list })}`;
+      const action = f.page.getByTestId('fiche-action');
+      assert.equal(await action.getByRole('link', { name: 'Suivre le paiement', exact: true }).getAttribute('href'), `/colis/${D.lebon}?${new URLSearchParams({ returnTo: self, section: 'paiement' })}#dossier-work`);
+      assert.equal(await action.getByRole('link', { name: 'Tout le dossier', exact: true }).getAttribute('href'), `/colis/${D.lebon}?${new URLSearchParams({ returnTo: self })}`);
+      await action.getByRole('link', { name: 'Tout le dossier', exact: true }).click();
+      await f.page.waitForURL(url => url.pathname === `/colis/${D.lebon}`);
+      await f.page.getByRole('button', { name: 'Retour à la liste de travail' }).first().click();
+      await f.page.waitForURL(url => url.pathname === `/brouillon/${D.lebon}` && url.searchParams.get('returnTo') === list);
+      await f.page.getByRole('heading', { level: 1, name: 'Lebon Marc', exact: true }).waitFor();
+      await f.page.locator('.fiche-back').click();
+      await f.page.waitForURL(url => url.pathname === '/' && url.searchParams.get('onglet') === 'a_payer' && url.searchParams.get('q') === 'Lebon');
+      await tabs(f).locator('[aria-current="page"]', { hasText: 'À payer' }).waitFor();
+      await rowOf(f, D.lebon).waitFor();
+      noSend(f);
+    });
+
+    await scenario('scanner-fills-the-search-without-a-focused-field', async f => {
+      await openHome(f);
+      const search = f.page.getByLabel('Chercher un client, une référence, un casier ou un numéro de suivi', { exact: true });
+      // A scan while « Demander l’accord » has the focus: searched; the button is not pressed, no field takes the focus.
+      const trigger = rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true });
+      await trigger.focus();
+      await f.page.keyboard.type('EXP-TEST', { delay: 5 });
+      await f.page.keyboard.press('Enter');
+      await f.page.waitForURL(url => url.searchParams.get('q') === 'EXP-TEST');
+      assert.equal(await search.inputValue(), 'EXP-TEST');
+      assert.equal(await f.page.getByRole('dialog').count(), 0, 'The focused button was not pressed.');
+      assert.equal(await search.evaluate(element => element === document.activeElement), false, 'No keyboard opened on a tablet.');
+      // A tracking number with its spaces, scanned while nothing has the focus: its only dossier opens.
+      await f.page.evaluate(() => document.activeElement?.blur?.());
+      await f.page.keyboard.type('6A 123 456 789 01', { delay: 5 });
+      await f.page.keyboard.press('Enter');
+      await f.page.waitForURL(url => url.pathname === `/brouillon/${D.riviere}`);
+      assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), `/?${new URLSearchParams({ q: '6A 123 456 789 01' })}`);
+      // A person typing slowly, then Enter on the focused button: the button does what it says.
+      await openHome(f);
+      await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).focus();
+      await f.page.keyboard.type('abcd', { delay: 150 });
+      await f.page.keyboard.press('Enter');
+      await f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true }).waitFor();
+      assert.equal(await search.inputValue(), '');
+      noSend(f);
+    });
+
+    await scenario('fiche-sheet-survives-turning-the-tablet', async f => {
+      await f.page.goto(`${base}/brouillon/${D.abdallah}`);
+      await f.page.getByRole('heading', { level: 1, name: 'Abdallah Mohamed', exact: true }).waitFor();
+      assert.equal(await f.page.locator('.fiche-grid[data-columns="two"]').count(), 1, 'Two columns in landscape.');
+      await f.page.getByTestId('fiche-action').getByRole('button', { name: 'Demander l’accord', exact: true }).click();
+      const sheet = f.page.getByRole('dialog', { name: 'Demander l’accord · Abdallah Mohamed', exact: true });
+      const message = sheet.getByLabel('Message à envoyer au client', { exact: true });
+      await message.waitFor();
+      await message.fill(`${await message.inputValue()}\nÀ bientôt.`);
+      await f.page.setViewportSize({ width: 1024, height: 1366 });
+      await f.page.locator('.fiche-grid:not([data-columns])').waitFor();
+      assert.match(await message.inputValue(), /À bientôt\.$/);
+      await assertReadable(f, 'fiche sheet portrait', '[role="dialog"]');
+      await assertAccessible(f, 'fiche sheet portrait', '[role="dialog"]');
+      await shot(f, 'fiche-tablette-feuille-accord', false);
+      await sheet.getByRole('button', { name: 'Envoyer la demande d’accord', exact: true }).click();
+      await sheet.waitFor({ state: 'detached' });
+      await f.page.getByTestId('fiche-action').getByText('Demande d’accord envoyée : Telegram a confirmé', { exact: true }).waitFor();
+      assert.match(f.tables.queue_calls[0].p_text, /À bientôt\.$/);
+    }, { device: { viewport: { width: 1366, height: 1024 }, hasTouch: true } });
+
+    await scenario('safari-14-fallbacks-in-the-styles', async f => {
+      await openHome(f);
+      const rules = await f.page.evaluate(() => [...document.styleSheets].flatMap(sheet => { try { return [...sheet.cssRules]; } catch { return []; } }).map(rule => rule.cssText));
+      // :focus-visible is unknown to Safari 14: a ring on :focus there.
+      assert.ok(rules.some(text => text.startsWith('.colis-page a:focus, .colis-page button:focus') && /outline: 2px solid/.test(text)), 'A focus ring without :focus-visible.');
+      assert.ok(!rules.some(text => /\.colis-[a-z-]+:focus-visible/.test(text) && !/:not\(:focus-visible\)/.test(text)), 'No ring that only :focus-visible shows.');
+      // overflow-wrap: anywhere is unknown to Safari 14: word-break: break-word next to it.
+      const anywhere = rules.filter(text => /overflow-wrap: anywhere/.test(text) && /\.(colis|fiche)-/.test(text));
+      assert.ok(anywhere.length > 0 && anywhere.every(text => /word-break: break-word/.test(text)), anywhere.join('\n'));
+      noSend(f);
+    });
+
+    // ── The domain contract (domain/brouillon.js): `permissions` and actionAllowed, `heldBy`, the steps
+    // client_a_repondu, demande_a_verifier, devis_a_completer, a paid total. These scenarios need it.
+    await scenario('contract-actions-the-account-may-not-do', async f => {
+      await openHome(f);
+      // « Envoyer le devis » is not for a préparateur: the dossier to read, and why.
+      const quote = rowOf(f, D.grondin).getByRole('link', { name: 'Voir le dossier', exact: true });
+      assert.equal(await quote.getAttribute('href'), `/colis/${D.grondin}?returnTo=%2F`);
+      await rowOf(f, D.grondin).getByText('Réservé aux personnes autorisées à établir ou envoyer le devis.', { exact: true }).waitFor();
+      assert.equal(await rowOf(f, D.grondin).getByRole('link', { name: 'Envoyer le devis', exact: true }).count(), 0);
+      // What he may do stays one click away; what needs another right is disabled with its reason.
+      await rowOf(f, D.payet).getByRole('link', { name: 'Préparer', exact: true }).waitFor();
+      assert.equal(await rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true }).isDisabled(), true);
+      assert.equal(await rowOf(f, D.techer).getByRole('button', { name: 'Valider la réception', exact: true }).isDisabled(), true);
+      await assertReadable(f, 'actions not allowed');
+      await assertAccessible(f, 'actions not allowed');
+      await shot(f, 'colis-tablette-droits', false);
+      noSend(f);
+    }, { role: 'preparateur', permissions: { perm_colis_preparer: true, perm_clients_voir: true } });
+
+    await scenario('contract-colleague-new-steps-and-paid', async f => {
+      await openHome(f);
+      // A colleague holds the accord of Abdallah: said on the line, the message stays closed.
+      const abdallah = rowOf(f, D.abdallah);
+      await abdallah.getByText('Lucie Martin s’en occupe', { exact: true }).waitFor();
+      assert.equal(await abdallah.getByRole('button', { name: 'Demander l’accord', exact: true }).isDisabled(), true);
+      // The client answered: read the reply in the conversation, and come back.
+      const boyer = rowOf(f, D.boyer);
+      assert.equal(await boyer.getAttribute('data-stage'), 'client_a_repondu');
+      const reply = boyer.locator('a[data-action="lire_reponse"]');
+      const replyHref = new URL(await reply.getAttribute('href'), base);
+      assert.deepEqual([replyHref.pathname, replyHref.searchParams.get('onglet'), replyHref.searchParams.get('returnTo')], [`/colis/${D.boyer}`, 'conversation', '/']);
+      // The request never reached the client: check its sending in the conversation.
+      const request = rowOf(f, D.request);
+      assert.equal(await request.getAttribute('data-stage'), 'demande_a_verifier');
+      const check = new URL(await request.locator('a[data-action="verifier_envoi"]').getAttribute('href'), base);
+      assert.deepEqual([check.pathname, check.searchParams.get('onglet'), check.searchParams.get('returnTo')], [`/colis/${D.request}`, 'conversation', '/']);
+      // A quote that cannot be computed yet (no article): its quote task.
+      const lines = rowOf(f, D.lines);
+      assert.equal(await lines.getAttribute('data-stage'), 'devis_a_completer');
+      assert.equal(await lines.locator('a[data-action="completer_devis"]').getAttribute('href'), `/colis/${D.lines}?returnTo=%2F&section=devis#dossier-work`);
+      // Amber: to do (the reply to read); the colour of what is to check otherwise (the quote's gaps).
+      const pill = id => rowOf(f, id).locator('.colis-pill').evaluate(element => getComputedStyle(element).backgroundColor);
+      assert.equal(await pill(D.boyer), 'rgb(255, 241, 204)');
+      assert.equal(await pill(D.lines), 'rgb(253, 228, 220)');
+      assert.match(await flat(lines), /Articles et catégories à renseigner/);
+      await assertReadable(f, 'new steps');
+      await assertAccessible(f, 'new steps');
+      await shot(f, 'colis-tablette-nouvelles-etapes', false);
+      // Paid: « Payé » beside the amount, « Total payé » or « Total » above it, never « Total à payer ».
+      await tabs(f).getByRole('link', { name: /^Prêt à partir/ }).click();
+      await f.page.getByRole('columnheader', { name: 'Total payé', exact: true }).waitFor();
+      assert.match(await flat(rowOf(f, D.fontaine).locator('td[data-align="right"]')), /^80,00 € Payé$/);
+      await tabs(f).getByRole('link', { name: /^Parti/ }).click();
+      await f.page.getByRole('columnheader', { name: 'Total', exact: true }).waitFor();
+      assert.match(await flat(rowOf(f, D.maillot).locator('td[data-align="right"]')), /^40,00 € Payé$/);
+      await f.page.goto(`${base}/brouillon/${D.fontaine}`);
+      const action = f.page.getByTestId('fiche-action');
+      await action.getByRole('heading', { name: 'Prix', exact: true }).waitFor();
+      assert.match(await flat(action.getByTestId('fiche-total')), /^Payé 80,00 €$/);
+      assert.doesNotMatch(await flat(f.page.locator('main')), /à payer/);
+      await assertReadable(f, 'paid sheet');
+      await assertAccessible(f, 'paid sheet');
+      await shot(f, 'fiche-tablette-payee');
+      // The fiche of Abdallah says who holds its accord too.
+      await f.page.goto(`${base}/brouillon/${D.abdallah}`);
+      await f.page.getByTestId('fiche-action').getByText('Lucie Martin s’en occupe', { exact: true }).waitFor();
+      assert.equal(await f.page.getByTestId('fiche-action').getByRole('button', { name: 'Demander l’accord', exact: true }).isDisabled(), true);
+      noSend(f);
+    }, { prepare: f => {
+      f.tables.staff_users.push(COLLEAGUE_USER);
+      f.tables.staff_work_actions = [heldTask(D.abdallah)];
+      // Boyer answered after the request.
+      const boyer = f.tables.colis.find(row => row.id === D.boyer);
+      boyer.conversation_statut = 'a_traiter';
+      f.tables.messages.push({ id: uuid(801), colis_id: D.boyer, type: 'client', template: null, texte: 'Bonjour, c’est bon pour moi, vous pouvez préparer.', statut: 'envoye', canal: 'telegram', auteur_nom: 'Sandrine Boyer', created_at: ago(1), notification_outbox: [] });
+      // Payet's second dossier: its request was recorded, Telegram never delivered it.
+      f.tables.colis.push(dossier(D.request, CLIENT.payet, 'EXP-TEST-114', 'attente_feu_vert', [carton('PA-9', 'Shein', 30, 20, 10, 1)],
+        { casier: 'A-08', consent_request_version: 1, demande_feu_vert_envoyee_at: null, reception_dates: received([1], 2) }));
+      f.tables.messages.push({ id: uuid(802), colis_id: D.request, type: 'staff', template: 'demande_feu_vert', texte: 'Bonjour Flavie…', statut: 'echec', canal: 'telegram', auteur_nom: 'Camille', created_at: ago(0, 2), notification_outbox: [{ status: 'failed', sent_at: null }] });
+      // Hoarau's second dossier: prepared, its invoice verified, no article yet.
+      f.tables.colis.push(dossier(D.lines, CLIENT.hoarau, 'EXP-TEST-115', 'en_preparation', [carton('HO-9', 'Darty', 30, 30, 20, 2)],
+        { casier: 'B-13', envoi_id: E.later, feu_vert: 'autorise', feu_vert_date: ago(2), reception_dates: received([1], 3), ...prepared([box(30, 30, 20, 2)]) }));
+      f.tables.factures.push({ id: uuid(606), colis_id: D.lines, vendeur: 'Darty', montant: 120, valide: true, fichier_url: `${D.lines}/facture-6.pdf`, fichier_nom: 'facture-6.pdf' });
+    } });
+
     await scenario('sheet-dossier-not-found-or-archived', async f => {
       const missing = uuid(999);
       await f.page.goto(`${base}/brouillon/${missing}`);
@@ -820,6 +1136,8 @@ async function main() {
       const action = f.page.getByTestId('fiche-action');
       await action.getByRole('heading', { name: 'Prochaine étape', exact: true }).waitFor();
       assert.doesNotMatch(await flat(f.page.locator('main')), /€|Prix à payer/);
+      // What the quote still needs carries no amount: said to everyone.
+      await action.getByTestId('fiche-manques').getByText('Accord du client', { exact: true }).waitFor();
       assert.equal(await action.getByRole('button', { name: 'Ajouter un carton', exact: true }).isDisabled(), true);
       await action.getByText('Réservé aux personnes autorisées à réceptionner.', { exact: true }).first().waitFor();
       const notice = f.page.getByTestId('fiche-avis');
@@ -887,7 +1205,7 @@ async function main() {
     await scenario('empty-tab-says-why-and-what-to-do', async f => {
       await f.page.getByRole('heading', { level: 2, name: 'Aucun colis en stock', exact: true }).waitFor();
       await f.page.getByText('Les cartons réceptionnés apparaissent ici jusqu’à l’envoi du devis.', { exact: true }).waitFor();
-      assert.equal(await f.page.getByRole('link', { name: 'Réceptionner des cartons', exact: true }).getAttribute('href'), '/recevoir');
+      assert.equal(await f.page.getByRole('link', { name: 'Réceptionner des cartons', exact: true }).getAttribute('href'), '/recevoir?returnTo=%2F');
       assert.equal(await tabs(f).getByRole('link', { name: 'Brouillon 0 dossier', exact: true }).count(), 1);
       assert.match(await flat(f.page.getByTestId('colis-totals')), /^En stock, devis pas encore envoyé · aucun dossier$/);
       await assertReadable(f, 'empty tab');
@@ -936,7 +1254,7 @@ async function main() {
       await f.page.getByRole('heading', { level: 1, name: 'Fontaine Lucas', exact: true }).waitFor();
       const action = f.page.getByTestId('fiche-action');
       assert.equal(await action.getByRole('link', { name: 'Préparer le départ', exact: true }).getAttribute('href'), `/colis/${D.fontaine}?returnTo=%2Fbrouillon%2F${D.fontaine}&section=expedition#dossier-work`);
-      assert.match(await flat(action), /Total à payer 80,00 €/);
+      assert.match(await flat(action), /80,00 €/);
       assert.equal(await action.getByRole('button', { name: 'Ajouter un carton', exact: true }).isDisabled(), true);
       await action.getByText('Le paiement est déjà enregistré. Un responsable doit vérifier ce dossier avant tout ajout.', { exact: true }).waitFor();
       await assertReadable(f, 'paid sheet');

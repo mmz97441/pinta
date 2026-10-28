@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { AlertTriangle, Camera, ChevronLeft, FolderOpen, PackagePlus, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Camera, Check, ChevronLeft, FolderOpen, PackagePlus, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useMediaQuery from '../../hooks/useMediaQuery';
@@ -8,13 +8,15 @@ import useDocumentTitle from '../../hooks/useDocumentTitle';
 import useShellLoadBanner from '../../hooks/useShellLoadBanner';
 import { workspaceReturnPath } from '../../domain/navigation';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
-import { brouillonFiche, colisTab, pendingByColis } from '../../domain/brouillon';
+import { PAID_TOTAL_STATE, brouillonFiche, colisTab, pendingByColis } from '../../domain/brouillon';
 import { formatDossierTableDate } from '../../domain/dossierTable';
 import { SecureImage } from '../ui/SecureFile';
 import ColisAction from './ColisAction';
-import ConsentPanel from './ConsentPanel';
+import ConsentSheet from './ConsentSheet';
 import ArrivalNoticeBlock from './ArrivalNoticeBlock';
 import StagePill from './StagePill';
+import { dossierHref as wholeDossierHref, withReturnTo } from './colisLinks';
+import useConsentSheet from './useConsentSheet';
 import useReceptionSignals from './useReceptionSignals';
 import './colisHome.css';
 
@@ -128,19 +130,29 @@ function OptimizedParcels({ optimized, received, wide }) {
   </section>;
 }
 
-/** « Prix à payer », from the saved quote only (brouillonFiche.price), or what the quote still needs. */
+/** What the quote still needs (brouillonFiche.missing): the journey's steps, then the gaps of the calculation. */
+function Missing({ missing }) {
+  if (!missing?.length) return null;
+  return <div className="grid gap-1" data-testid="fiche-manques">
+    <p className="m-0 text-[15px]">Pour calculer le devis, il manque :</p>
+    <ul className="m-0 grid gap-1 pl-5 text-[15px]" style={{ listStyle: 'disc' }}>{missing.map(item => <li key={item}>{item}</li>)}</ul>
+  </div>;
+}
+
+/** « Prix à payer », from the saved quote only (brouillonFiche.price), or what the quote still needs. Paid
+ * (`price.state` PAID_TOTAL_STATE): « Payé » beside the amount, never « à payer ». */
 function Price({ price }) {
+  const paid = price.state === PAID_TOTAL_STATE;
   if (!price.known) return <>
-    <h2 id="fiche-prix">Prix à payer</h2>
-    <p className="m-0 text-[19px] font-bold colis-muted" data-testid="fiche-prix-etat">{price.label}</p>
-    {price.missing?.length > 0 && <div className="grid gap-1">
-      <p className="m-0 text-[15px]">Pour calculer le devis, il manque :</p>
-      <ul className="m-0 grid gap-1 pl-5 text-[15px]" style={{ listStyle: 'disc' }}>{price.missing.map(item => <li key={item}>{item}</li>)}</ul>
-    </div>}
+    <h2 id="fiche-prix" tabIndex={-1}>{paid ? 'Prix' : 'Prix à payer'}</h2>
+    {paid
+      ? <p className="m-0"><span className="colis-paid" data-testid="fiche-prix-etat"><Check size={18} aria-hidden="true" />{price.label}</span></p>
+      : <p className="m-0 text-[19px] font-bold colis-muted" data-testid="fiche-prix-etat">{price.label}</p>}
+    <Missing missing={price.missing} />
     {price.message && <p className="m-0 text-[15px]">{price.message}</p>}
   </>;
   return <>
-    <h2 id="fiche-prix">Prix à payer</h2>
+    <h2 id="fiche-prix" tabIndex={-1}>{paid ? 'Prix' : 'Prix à payer'}</h2>
     {price.detailed && <>
       <div>
         <div className="fiche-line"><span>{price.transport.label}</span><span>{price.transport.text}</span></div>
@@ -161,8 +173,10 @@ function Price({ price }) {
       </>}
       <div className="fiche-rule" data-strong="true" />
     </>}
-    <div className="fiche-total" data-testid="fiche-total"><span>Total à payer</span><span>{price.total.text}</span></div>
-    {price.state && <p className="m-0 text-[15px] colis-muted">État du devis : {price.state}</p>}
+    <div className="fiche-total" data-testid="fiche-total" data-paid={paid ? 'true' : undefined}>
+      <span>{paid ? <span className="inline-flex items-center gap-1"><Check size={20} aria-hidden="true" />{price.total.label}</span> : 'Total à payer'}</span><span>{price.total.text}</span>
+    </div>
+    {price.state && !paid && <p className="m-0 text-[15px] colis-muted">État du devis : {price.state}</p>}
     {price.savings && <p className="fiche-saving m-0">{price.savings.label} : {price.savings.text}</p>}
     {price.message && <p className="m-0 text-[15px]">{price.message}</p>}
   </>;
@@ -171,13 +185,15 @@ function Price({ price }) {
 export default function BrouillonFiche() {
   const { id } = useParams();
   const location = useLocation();
-  const { data = [], envois = [], settings = {}, can, getClient, refreshColis, setSelId } = useApp();
+  const { data = [], envois = [], settings = {}, tarifs, categories, sbReady, can, getClient, refreshColis, setSelId, auth, workActions = [], teamUsers = [] } = useApp();
   const outage = useShellLoadBanner();
   const now = useMinuteNow();
   const wide = useMediaQuery('(min-width: 768px)');
   const twoColumns = useMediaQuery('(min-width: 1280px)');
   const validId = UUID.test(String(id || ''));
   const back = workspaceReturnPath(location.search, '/');
+  // This sheet as it was opened (with the way back to its list): the pages it opens come back to it.
+  const self = validId ? `/brouillon/${encodeURIComponent(id)}${new URLSearchParams(location.search).has('returnTo') ? `?${new URLSearchParams({ returnTo: back })}` : ''}` : '/';
   const dossier = data.find(item => item.id === id) || null;
   const client = dossier?.clientId ? getClient(dossier.clientId) || null : null;
   const inColis = Boolean(dossier) && colisTab(dossier) !== null;
@@ -196,29 +212,24 @@ export default function BrouillonFiche() {
 
   const signals = useReceptionSignals({ clientId: dossier?.clientId || null, colisId: validId ? id : null, limit: 50, photos: true, enabled: inColis, data });
   const pendingIndex = useMemo(() => pendingByColis(signals.pending || []), [signals.pending]);
-  const fiche = useMemo(() => inColis ? brouillonFiche(dossier, { client, envois, settings, pending: pendingIndex, notices: signals.notices || [], can, now }) : null,
-    [inColis, dossier, client, envois, settings, pendingIndex, signals.notices, can, now]);
+  // `actions`, `me`, `teamUsers`: who holds each task (the step's `heldBy`). `tarifs` and `categories` once loaded
+  // only (empty while the data load runs or after it failed): what the quote misses is checked against them.
+  const me = auth?.u || null;
+  const ctx = useMemo(() => ({ client, envois, settings, pending: pendingIndex, notices: signals.notices || [], can, now, actions: workActions, me, teamUsers, ...(sbReady ? { tarifs, categories } : {}) }),
+    [client, envois, settings, pendingIndex, signals.notices, can, now, workActions, me, teamUsers, sbReady, tarifs, categories]);
+  const fiche = useMemo(() => inColis ? brouillonFiche(dossier, ctx) : null, [inColis, dossier, ctx]);
   const rawNotice = fiche?.notice ? (signals.notices || []).find(item => item.id === fiche.notice.id) || null : null;
   useDocumentTitle(fiche ? fiche.header.clientName : 'Fiche Brouillon');
 
-  // « Demander l’accord » / « Relancer » in place, on this dossier selected for TaskMessage.
-  const [panel, setPanel] = useState(null);
-  const panelRef = useRef(null);
-  panelRef.current = panel;
-  const closePanel = useCallback(() => {
-    setPanel(null);
-    setSelId(current => current === id ? null : current);
-    requestAnimationFrame(() => document.querySelector('[data-fiche-action] button[data-action]')?.focus());
-  }, [id, setSelId]);
-  const togglePanel = () => {
-    if (panelRef.current) { closePanel(); return; }
-    setSelId(id);
-    setPanel({ title: `${fiche.action.label} · ${fiche.header.clientName}` });
-  };
-  useEffect(() => () => { if (panelRef.current) setSelId(current => current === id ? null : current); }, [id, setSelId]);
-  useEffect(() => { setPanel(null); }, [id]);
+  // « Demander l’accord » / « Relancer »: the page's message sheet, on this dossier selected for TaskMessage. It
+  // belongs to the page: turning the tablet (one column or two) keeps the message as it is.
+  const focusAction = useCallback(() => {
+    (document.querySelector('[data-fiche-action] [data-action]:not([disabled])') || document.querySelector('[data-testid="fiche-action"] h2'))?.focus?.();
+  }, []);
+  const { sheet, open: openConsent, close: closeSheet, sent: sheetSent, confirmations } = useConsentSheet({ setSelId, focusAfter: focusAction });
+  useEffect(() => { closeSheet(); }, [id, closeSheet]);
 
-  const dossierHref = validId ? `/colis/${encodeURIComponent(id)}?${new URLSearchParams({ returnTo: `/brouillon/${id}` })}` : null;
+  const dossierHref = validId ? wholeDossierHref(id, self) : null;
   if (!dossier) {
     if (validId && read.state === 'loading') return <div className={`${PAGE} max-w-3xl space-y-4`} aria-busy="true">
       <BackLink to={back} />
@@ -238,20 +249,26 @@ export default function BrouillonFiche() {
 
   const { header, price, links } = fiche;
   const addCarton = links.addCarton;
+  // The action of its line, with its own address (the conversation, the reception) or its task.
+  const action = fiche.stage?.action || fiche.action || null;
   const receptionAllowed = can('perm_colis_receptionner');
   const addReason = addCarton.blockedReason || (!receptionAllowed ? 'Réservé aux personnes autorisées à réceptionner.' : '');
   const actionCard = <section key="action" className="fiche-card" aria-labelledby="fiche-prix" data-testid="fiche-action">
-    {price.visible ? <Price price={price} /> : <h2 id="fiche-prix">Prochaine étape</h2>}
+    {price.visible ? <Price price={price} /> : <>
+      {/* Without the right to see amounts: no amount, but « Payé » and what the quote still needs. */}
+      <h2 id="fiche-prix" tabIndex={-1}>Prochaine étape</h2>
+      {price.state === PAID_TOTAL_STATE && <p className="m-0"><span className="colis-paid" data-testid="fiche-prix-etat"><Check size={18} aria-hidden="true" />{price.label}</span></p>}
+      <Missing missing={fiche.missing} />
+    </>}
     <div className="grid gap-3" data-fiche-action="">
-      <ColisAction row={{ id: fiche.id, clientId: dossier.clientId, action: fiche.action }} action={fiche.action} href={fiche.action?.href || null} returnTo={`/brouillon/${id}`} can={can} size="large"
-        panelId="fiche-panneau" panelOpen={Boolean(panel)} onTogglePanel={togglePanel} />
-      {panel && <ConsentPanel id="fiche-panneau" dossierId={id} title={panel.title} onClose={closePanel}
-        returnHref={dossierTaskUrl(id, 'accord', `?${new URLSearchParams({ returnTo: `/brouillon/${id}` })}`, { hash: 'dossier-work' })} />}
+      <ColisAction row={{ id: fiche.id, clientId: dossier.clientId, action }} action={action} returnTo={self} can={can} size="large"
+        held={fiche.stage?.heldBy || null} confirmation={confirmations[id] || null}
+        panelId="feuille-message" panelOpen={Boolean(sheet)} onOpenPanel={() => openConsent(id, `${action.label} · ${header.clientName}`)} />
     </div>
     <div className="flex flex-wrap items-start gap-3 border-t pt-3" style={{ borderColor: 'var(--colis-line-soft)' }}>
-      {links.dossier && <Link to={links.dossier.href} className="colis-secondary"><FolderOpen size={18} aria-hidden="true" />{links.dossier.label}</Link>}
+      {links.dossier && <Link to={wholeDossierHref(id, self)} className="colis-secondary"><FolderOpen size={18} aria-hidden="true" />{links.dossier.label}</Link>}
       {addCarton.href && !addReason
-        ? <Link to={addCarton.href} className="colis-secondary"><PackagePlus size={18} aria-hidden="true" />{addCarton.label}</Link>
+        ? <Link to={withReturnTo(addCarton.href, self)} className="colis-secondary"><PackagePlus size={18} aria-hidden="true" />{addCarton.label}</Link>
         : <div className="min-w-0 flex-1 basis-56">
           <button type="button" disabled aria-describedby="fiche-ajout-raison" className="colis-secondary"><PackagePlus size={18} aria-hidden="true" />{addCarton.label}</button>
           <p id="fiche-ajout-raison" className="colis-reason">{addReason || 'L’ajout d’un carton n’est pas possible pour ce dossier.'}</p>
@@ -287,5 +304,9 @@ export default function BrouillonFiche() {
       </div>
       // Phone and tablet: the total and the action first, then the parcels to ship, then the cartons received.
       : <div className="fiche-grid">{actionCard}{optimizedSection}{receivedSection}{noticeSection}</div>}
+    {sheet && <ConsentSheet key={sheet.id} id="feuille-message" dossierId={sheet.id} title={sheet.title} action={action} held={fiche.stage?.heldBy || null}
+      returnHref={dossierTaskUrl(id, 'accord', `?${new URLSearchParams({ returnTo: self })}`, { hash: 'dossier-work' })}
+      clientHref={dossier.clientId && (can('perm_clients_voir') || can('perm_clients_creer')) ? `/clients/${encodeURIComponent(dossier.clientId)}` : null}
+      onClose={closeSheet} onSent={sheetSent} />}
   </div>;
 }
