@@ -189,3 +189,34 @@ Migration `20261010000001_history_retention.sql`, préparée et vérifiée local
 - Le lien entre une écriture de correction et le paiement corrigé, le moyen de paiement normalisé et les factures émises relèvent du lot facturation (I2), qui devra garder ces gardes.
 - `tarifs` est mis à jour en place : sa version reste à traiter par la grille versionnée (I6).
 - Une migration future qui remplit une colonne ajoutée à une table en ajout seul doit désactiver explicitement le déclencheur dans sa propre transaction, après revue.
+
+## Réception validée et avis d’arrivée groupé — 28 octobre 2026
+
+Migration `20261028000001_reception_validation.sql`, vérifiée localement, **non déployée**. Contrat : section « Base de données : réception validée et avis d’arrivée » de `docs/specification-brouillon-reception-2026-10-28.md`. Fonctions côté écran : `src/expedile/lib/receptionValidation.js`.
+
+**Décisions.**
+
+- **Carton en attente.** Le carton n° i attend sa validation si i dépasse le dernier carton validé du dossier et si sa date de réception, telle que le serveur l’a tamponnée dans `colis.reception_dates`, est connue et postérieure ou égale au point de départ. Une date seulement reconstituée à la lecture (`get_reception_dates`) ne crée jamais d’attente : l’historique ne déclenche pas d’alerte. Un dossier archivé ou annulé n’a jamais de carton en attente.
+- **Point de départ.** Une seule ligne, posée à l’exécution de la migration, ni modifiable ni supprimable. Les cartons reçus entre la migration et la mise en service des écrans apparaîtraient « à valider » : déployer la migration avec les écrans. Déplacer ce point demande une migration relue qui désactive le déclencheur dans sa propre transaction.
+- **Ajout seul.** `reception_validation_settings`, `reception_validations` et `reception_validation_items` refusent `UPDATE`, `DELETE` et `TRUNCATE` à tous les rôles (SQLSTATE `23001`, HINT `retention:<table>`). Leurs déclencheurs s’appellent `reception_validation_guard` et `reception_validation_truncate`, pour ne pas changer le nombre de déclencheurs `retention_*` que contrôle la mise en production du 10 octobre. RLS sans politique, aucun droit pour `anon`, `authenticated` et `service_role` : lecture et écriture par les trois commandes seulement.
+- **Clés `RESTRICT`** vers le client, le membre de l’équipe, le message, la validation et le dossier. Écart assumé au contrat : aucune clé vers `notification_outbox`. PostgreSQL refuserait sinon un `TRUNCATE` simple de cette table (0A000) avant sa garde de conservation (23001, contrôlée par `retention.sql`, R13). La ligne de sortie ne peut de toute façon pas être supprimée, et la commande y inscrit l’identifiant rendu par `queue_message` dans la même transaction.
+- **La validation n’écrit aucun dossier** (ni `updated_at`, ni statut, ni consentement). Les dossiers sont verrouillés dans l’ordre de leurs identifiants : deux validations du même carton se suivent, la seconde est refusée (22023). Un carton ajouté entre-temps par un collègue reste en attente.
+- **Rejeu.** Même `p_request_id`, même contenu et même personne : le résultat enregistré revient (`reused: true`), avec l’état actuel du message et de sa sortie. Sinon : 40001. Un verrou consultatif sur l’identifiant fait attendre une seconde demande identique arrivée pendant la première, qui retrouve alors son résultat.
+- **Canal décidé par le serveur.** Telegram si `telegram_chat_id` n’est pas vide (espaces ignorés), sinon l’e-mail s’il n’est pas vide, sinon 22023 « Ce client n’a ni Telegram ni e-mail : validez sans prévenir ». Un `p_canal` valide mais différent : 40001. Écart assumé au contrat : un `p_canal` absent ou inconnu est une demande mal formée (22023), pas un contact changé. La permission de communication est vérifiée avant `queue_message` (42501 avec la raison, au lieu de son erreur générique). Sans avis, canal, modèle et texte sont refusés s’ils sont transmis : l’écran ne les envoie pas.
+- **Un seul avis.** `queue_message` sur le premier dossier de la demande, clé `arrival:<id de validation>`, avant l’écriture de la validation : Telegram `pending` (envoyé par l’écran avec `deliverMessage`, sinon par la tâche planifiée), e-mail `manual`. L’instantané des cartons suit l’ordre des dossiers de la demande puis les numéros de carton ; `receptionCartonsFor` reproduit cette règle pour le texte affiché.
+- **Journal.** Une entrée `reception_validated` par dossier (plage de cartons, avis, canal, message ; cartons dans `after_data`).
+- **Facture envoyée en réponse à l’avis (exception assumée à « aucune fonction redéfinie »).** `register_telegram_document` est redéfinie : copie intégrale de 20261006000002, mêmes signature, propriétaire et droits, plus un seul cas. Une pièce envoyée en réponse explicite à un avis `arrivee_colis_facture` remis par Telegram compte comme la facture demandée tant que le dossier en demande une (condition du cas `feu_vert_recu_facture`), avec la règle des sept jours inchangée. Elle est enregistrée « Document à vérifier » sur le premier dossier de la réception, celui qui porte l’avis. Le marqueur que vérifie le lot 3b reste présent une fois ; empreinte md5 sur le rejeu local : `62bf160ffe11df780e3611785e94db83` avant, `17ab6ed962fd51c4de9e63a38e47c2df` après.
+
+**Hors périmètre, volontairement.**
+
+- Les textes des avis, les écrans et `arrivalChannel(client)`, qui doit appliquer la même règle de canal (valeurs non vides, espaces ignorés).
+- Le fournisseur d’e-mail : un avis par e-mail reste `manual`.
+- Le contrôle de la personne assignée à la tâche de réception (`_assert_staff_task_owner`) : la validation n’écrit pas le dossier.
+- La répartition d’une facture envoyée en réponse à un avis qui couvre plusieurs dossiers : elle est rattachée au premier, comme document à vérifier.
+- Aucun script de mise en production n’est écrit pour ce lot. Les commandes gardent l’`EXECUTE` que Supabase accorde par défaut à `service_role`, sans effet (42501 sans membre de l’équipe).
+
+**Vérification locale.** Sur PostgreSQL 17 isolé (`--network none`), sans aucun accès distant :
+
+- `supabase/tests/run-reception-validation.sh`, sous les droits par défaut de Supabase : 108 assertions (forme, cartons en attente, refus, validations sans avis et avec avis Telegram ou e-mail, rejeu, avis d’arrivée, ajout seul, facture en réponse à l’avis), puis deux sessions concurrentes réelles (même carton : une seule réussit ; même demande : un seul enregistrement) ;
+- les 31 étapes SQL de la CI ; avant et après la migration, seule `register_telegram_document` change parmi les fonctions existantes, et aucun déclencheur existant ;
+- `npm run lint`, les tests Edge et `npm test` (dont `tests/reception-validation-client.test.mjs`). Un test préexistant échoue depuis le 25 octobre 2026, indépendamment de ce lot : `src/expedile/domain/dossierTable.test.js` (ligne 570) suppose une date antérieure à la fin de l’attente qu’il décrit.
