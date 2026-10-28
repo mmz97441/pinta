@@ -122,6 +122,9 @@ jobs:
           node tests/task-claim.browser.cjs || failed_suites="$failed_suites task-claim.browser.cjs"
           node tests/collaborative-work.browser.cjs || failed_suites="$failed_suites collaborative-work.browser.cjs"
           node tests/reception-without-notification.browser.cjs || failed_suites="$failed_suites reception-without-notification.browser.cjs"
+          # Brouillon simplifié (28 octobre 2026) : écrans Colis et Fiche Brouillon, réception en quatre étapes et avis d’arrivée.
+          PINTA_COLIS_HOME_OUT=/tmp/pinta-colis-home node tests/colis-home.browser.cjs || failed_suites="$failed_suites colis-home.browser.cjs"
+          PINTA_RECEPTION_FLOW_OUT=/tmp/pinta-reception-flow node tests/reception-flow.browser.cjs || failed_suites="$failed_suites reception-flow.browser.cjs"
           node tests/client-lightweight.browser.cjs || failed_suites="$failed_suites client-lightweight.browser.cjs"
           node tests/task-message.browser.cjs || failed_suites="$failed_suites task-message.browser.cjs"
           PINTA_WORKSPACE_OUT=/tmp/pinta-workspace-tasks node tests/organisation-workspace.browser.cjs || failed_suites="$failed_suites organisation-workspace.browser.cjs"
@@ -192,6 +195,8 @@ jobs:
             /tmp/pinta-dossier-accords
             /tmp/pinta-departures-page
             /tmp/pinta-receipt-flow
+            /tmp/pinta-colis-home
+            /tmp/pinta-reception-flow
             /tmp/pinta-client-lightweight
             /tmp/pinta-task-message
             /tmp/pinta-workspace-tasks
