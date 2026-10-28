@@ -2,9 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   ARRIVAL_NOTICE_STATES, BROUILLON_STAGES, COLIS_DEFAULT_SORT, COLIS_DEFAULT_TAB, COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_ACTION_LABEL,
-  arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3, colisActionHref, colisRow, colisSortKey, colisStage,
-  colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3, groupColisRowsByDeparture, pendingByClient,
-  pendingByColis, receptionTarget, sortColisRows,
+  NOTICE_SEND_CHECK_MINUTES, arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3, colisActionHref, colisRow,
+  colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3, groupColisRowsByDeparture,
+  orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
 } from './brouillon.js';
 import { workspaceReturnPath } from './navigation.js';
 import { STATUTS } from '../constants/index.js';
@@ -424,13 +424,16 @@ test('a reception joins the client’s most recent dossier still before its quot
 });
 
 // ── Arrival notices ──────────────────────────────────────────────────────────
+// A notice validated five minutes before `now`: still on its way for a few minutes.
+const recent = (changes = {}) => ({ createdAt: '2026-10-28T09:55:00Z', message: { id: 'm-1', statut: 'envoi', texte: 'Bonjour Flavie', createdAt: '2026-10-28T09:55:00Z' }, ...changes });
+
 test('the state of an arrival notice, for every state of its message and delivery', () => {
-  const state = changes => arrivalNoticeState(notice(changes));
+  const state = changes => arrivalNoticeState(notice(changes), { now });
   const read = changes => { const value = state(changes); return [value.key, value.label, value.tone]; };
   assert.deepEqual(read({ notify: false, canal: null, template: null, message: null, outbox: null }), ['sans_avis', 'Sans avis', 'neutral']);
   for (const status of ['pending', 'sending', 'blocked'])
-    assert.deepEqual(read({ message: { statut: 'envoi' }, outbox: { status } }), ['en_cours', 'En cours d’envoi', 'waiting'], status);
-  assert.deepEqual(read({ message: { statut: 'envoi' }, outbox: null }), ['en_cours', 'En cours d’envoi', 'waiting']);
+    assert.deepEqual(read(recent({ outbox: { status } })), ['en_cours', 'En cours d’envoi', 'waiting'], status);
+  assert.deepEqual(read(recent({ outbox: null })), ['en_cours', 'En cours d’envoi', 'waiting']);
   assert.deepEqual(read({}), ['envoye', 'Envoyé', 'done']);
   assert.equal(state({}).detail, 'Telegram a confirmé l’envoi le 27/10/2026');
   assert.deepEqual(read({ outbox: null }), ['envoye', 'Envoyé', 'done']);
@@ -445,11 +448,48 @@ test('the state of an arrival notice, for every state of its message and deliver
   assert.equal(state({ message: { statut: 'echec' }, outbox: null }).reason, 'Raison non précisée');
   assert.deepEqual(read({ message: { statut: 'envoi' }, outbox: { status: 'cancelled' } }), ['annule', 'Annulé', 'neutral']);
   assert.equal(state({ message: { statut: 'lu' }, outbox: { status: 'failed' } }).key, 'remis', 'A read message was delivered.');
-  assert.deepEqual(Object.keys(ARRIVAL_NOTICE_STATES), ['sans_avis', 'en_cours', 'envoye', 'remis', 'a_envoyer', 'non_remis', 'annule']);
+  assert.deepEqual(Object.keys(ARRIVAL_NOTICE_STATES), ['sans_avis', 'en_cours', 'a_verifier', 'envoye', 'remis', 'a_envoyer', 'non_remis', 'annule']);
   assert.equal(arrivalNoticeState(null), null);
   // The result of validate_reception reads the same, its outbox as the database writes it.
-  const validated = arrivalNoticeState({ validation: { id: 'v-1', notify: true, canal: 'telegram' }, message: { statut: 'echec' }, outbox: { status: 'failed', last_error: 'Chat introuvable' }, reused: false });
+  const validated = arrivalNoticeState({ validation: { id: 'v-1', notify: true, canal: 'telegram' }, message: { statut: 'echec' }, outbox: { status: 'failed', last_error: 'Chat introuvable' }, reused: false }, { now });
   assert.deepEqual([validated.key, validated.reason], ['non_remis', 'Chat introuvable']);
+});
+
+test('a notice still on its way after 10 minutes becomes « Envoi à vérifier », never « En cours d’envoi » for good', () => {
+  const at = (minutes, changes = {}) => {
+    const created = new Date(now - minutes * 60000).toISOString();
+    return notice({ createdAt: created, message: { id: 'm-1', statut: 'envoi', texte: 'Bonjour Flavie', createdAt: created }, ...changes });
+  };
+  const state = (item, when = now) => arrivalNoticeState(item, { now: when });
+  assert.equal(NOTICE_SEND_CHECK_MINUTES, 10);
+  assert.equal(state(at(9, { outbox: { status: 'pending' } })).key, 'en_cours');
+  assert.equal(state(at(10, { outbox: { status: 'pending' } })).key, 'en_cours', 'Ten minutes exactly: still on its way.');
+  // Never taken (the scheduled task stopped, a missing token…): « Réessayer » sends it (send-telegram takes a pending one).
+  const pending = state(at(11, { outbox: { status: 'pending', attempts: 0 } }));
+  assert.deepEqual(pending, { key: 'a_verifier', label: 'Envoi à vérifier', tone: 'review', detail: 'Toujours pas parti au bout de 10 minutes : l’envoi automatique ne l’a pas pris en charge.',
+    canal: 'telegram', canalLabel: 'Telegram', reason: null, action: { key: 'reessayer', label: 'Réessayer' } });
+  // A send started without confirmation: uncertain, to check in Telegram; the server sends again only a failed one.
+  const sending = state(at(30, { outbox: { status: 'sending', attempts: 1 } }));
+  assert.deepEqual([sending.key, sending.detail, sending.action], ['a_verifier', 'Envoi commencé il y a plus de 10 minutes, sans confirmation de Telegram : vérifiez dans Telegram si le message est arrivé.', null]);
+  const blocked = state(at(30, { outbox: { status: 'blocked', lastError: 'Conversation client à traiter avant toute relance' } }));
+  assert.deepEqual([blocked.key, blocked.detail, blocked.reason, blocked.action.key], ['a_verifier', 'Envoi retenu depuis plus de 10 minutes : Conversation client à traiter avant toute relance.', 'Conversation client à traiter avant toute relance', 'reessayer']);
+  const email = state(at(30, { canal: 'email', outbox: { status: 'sending' } }));
+  assert.deepEqual([email.key, email.detail, email.action], ['a_verifier', 'Envoi commencé il y a plus de 10 minutes, sans confirmation du fournisseur d’e-mail.', null]);
+  assert.deepEqual([state(at(30, { outbox: null })).key, state(at(30, { outbox: null })).action], ['a_verifier', null]);
+  // The message's date first, the validation's otherwise; without any date, nothing is claimed.
+  assert.equal(state(at(60, { message: { id: 'm-1', statut: 'envoi', createdAt: new Date(now - 5 * 60000).toISOString() }, outbox: { status: 'pending' } })).key, 'en_cours');
+  assert.equal(state(at(60, { message: { id: 'm-1', statut: 'envoi' }, outbox: { status: 'pending' } })).key, 'a_verifier');
+  assert.equal(state(notice({ createdAt: null, message: { id: 'm-1', statut: 'envoi' }, outbox: { status: 'pending' } })).key, 'en_cours');
+  // The states that are not « on its way » keep their own words, however old.
+  for (const [changes, key] of [[{ outbox: { status: 'sent', sentAt: '2026-10-01T10:00:00Z' } }, 'envoye'], [{ outbox: { status: 'failed' } }, 'non_remis'],
+    [{ canal: 'email', outbox: { status: 'manual' } }, 'a_envoyer'], [{ outbox: { status: 'cancelled' } }, 'annule'], [{ notify: false, message: null, outbox: null }, 'sans_avis']])
+    assert.equal(state(at(600, changes)).key, key, key);
+  // The result of validate_reception, with the database's own field names.
+  const result = { validation: { id: 'v-1', notify: true, canal: 'telegram', createdAt: new Date(now - 20 * 60000).toISOString() },
+    message: { id: 'm-1', statut: 'envoi', created_at: new Date(now - 20 * 60000).toISOString() }, outbox: { id: 'o-1', status: 'pending' }, reused: false };
+  assert.equal(state(result).key, 'a_verifier');
+  assert.equal(state(result, now - 15 * 60000).key, 'en_cours', 'Read at its own instant.');
+  assert.equal(arrivalNoticeSummary(at(30, { outbox: { status: 'pending' } }), { now }).state.key, 'a_verifier');
 });
 
 test('an arrival notice summary: date, client, channel, cartons and those of a dossier', () => {
@@ -463,14 +503,22 @@ test('an arrival notice summary: date, client, channel, cartons and those of a d
 });
 
 test('the alerts of the page appear only when something is to do', () => {
-  assert.deepEqual(brouillonAlerts({ pending: [], notices: [notice()] }), []);
+  assert.deepEqual(brouillonAlerts({ pending: [], notices: [notice()], now }), []);
   assert.deepEqual(brouillonAlerts(), []);
-  const one = brouillonAlerts({ pending: [pendingEntry('d-1', [2, 3]), pendingEntry('d-2', [1], { clientId: flavie.id })] });
+  const one = brouillonAlerts({ pending: [pendingEntry('d-1', [2, 3]), pendingEntry('d-2', [1], { clientId: flavie.id })], now });
   assert.deepEqual(one, [{ key: 'reception_a_valider', tone: 'review', count: 3, clients: 1, text: 'Réception à valider : 3 cartons', action: { label: 'Valider et prévenir', href: '/recevoir?client=c-flavie&valider=1' } }]);
-  const several = brouillonAlerts({ pending: pendingByColis([pendingEntry('d-1', [2]), pendingEntry('d-3', [1, 2], { clientId: zoe.id })]) });
+  const several = brouillonAlerts({ pending: pendingByColis([pendingEntry('d-1', [2]), pendingEntry('d-3', [1, 2], { clientId: zoe.id })]), now });
   assert.deepEqual(several[0], { key: 'reception_a_valider', tone: 'review', count: 3, clients: 2, text: 'Réception à valider : 3 cartons de 2 clients', action: { label: 'Voir les réceptions', href: '/avis' } });
-  const failed = brouillonAlerts({ notices: [notice({ outbox: { status: 'failed', lastError: 'x' } }), notice({ id: 'n-2' }), notice({ id: 'n-3', canal: 'email', message: { statut: 'envoi' }, outbox: { status: 'manual' } }), notice({ id: 'n-4', message: { statut: 'echec' }, outbox: null })] });
-  assert.deepEqual(failed, [{ key: 'avis_non_remis', tone: 'review', count: 2, text: '2 avis d’arrivée non remis', action: { label: 'Voir les avis', href: '/avis' } }]);
+  // Not delivered; an e-mail to send by hand is no alert; a notice on its way for a few minutes neither.
+  const delivered = notice({ id: 'n-2' }), manual = notice({ id: 'n-3', canal: 'email', message: { statut: 'envoi' }, outbox: { status: 'manual' } });
+  const onItsWay = notice({ id: 'n-5', ...recent({ outbox: { status: 'pending' } }) });
+  const failed = brouillonAlerts({ notices: [notice({ outbox: { status: 'failed', lastError: 'x' } }), delivered, manual, notice({ id: 'n-4', message: { statut: 'echec' }, outbox: null }), onItsWay], now });
+  assert.deepEqual(failed, [{ key: 'avis_non_remis', tone: 'review', count: 2, failed: 2, toCheck: 0, text: '2 avis d’arrivée non remis', action: { label: 'Voir les avis', href: '/avis' } }]);
+  // On its way for too long: to check, counted with the notices not delivered.
+  const stuck = notice({ id: 'n-6', createdAt: '2026-10-28T09:00:00Z', message: { id: 'm-6', statut: 'envoi', createdAt: '2026-10-28T09:00:00Z' }, outbox: { status: 'sending' } });
+  assert.deepEqual(brouillonAlerts({ notices: [stuck, delivered, manual], now }), [{ key: 'avis_non_remis', tone: 'review', count: 1, failed: 0, toCheck: 1, text: '1 avis d’arrivée à vérifier', action: { label: 'Voir les avis', href: '/avis' } }]);
+  assert.equal(brouillonAlerts({ notices: [stuck, notice({ id: 'n-7', outbox: { status: 'failed' } }), notice({ id: 'n-8', outbox: { status: 'failed' } })], now })[0].text, '2 avis d’arrivée non remis, 1 à vérifier');
+  assert.deepEqual(brouillonAlerts({ notices: [stuck], now: Date.parse('2026-10-28T09:05:00Z') }), [], 'Read at its own instant.');
 });
 
 test('the receptions to validate, indexed by dossier and grouped by client', () => {
@@ -484,13 +532,36 @@ test('the receptions to validate, indexed by dossier and grouped by client', () 
   assert.deepEqual(pendingByColis(null).size, 0);
   const groups = pendingByClient(index);
   assert.deepEqual(groups.map(group => [group.clientId, group.cartonCount, group.dossiers.map(entry => entry.colisId), group.items, group.href]), [
-    ['c-zoe', 3, ['d-5'], [{ colisId: 'd-5', throughCarton: 4 }], '/recevoir?client=c-zoe&valider=1'],
-    ['c-flavie', 2, ['d-1'], [{ colisId: 'd-1', throughCarton: 3 }], '/recevoir?client=c-flavie&valider=1'],
+    ['c-zoe', 3, ['d-5'], [{ colisId: 'd-5', fromCarton: 2, throughCarton: 4 }], '/recevoir?client=c-zoe&valider=1'],
+    ['c-flavie', 2, ['d-1'], [{ colisId: 'd-1', fromCarton: 2, throughCarton: 3 }], '/recevoir?client=c-flavie&valider=1'],
   ], 'The longest waiting first.');
-  // Every dossier of the client waiting: validateReception validates them together.
+  // Every dossier of the client waiting: validateReception validates them together, from the first carton shown.
   const both = pendingByClient([pendingEntry('d-1', [2, 3]), pendingEntry('d-2', [1])]);
-  assert.deepEqual(both.map(group => [group.clientId, group.cartonCount, group.items]), [['c-flavie', 3, [{ colisId: 'd-1', throughCarton: 3 }, { colisId: 'd-2', throughCarton: 1 }]]]);
+  assert.deepEqual(both.map(group => [group.clientId, group.cartonCount, group.items]), [['c-flavie', 3, [{ colisId: 'd-1', fromCarton: 2, throughCarton: 3 }, { colisId: 'd-2', fromCarton: 1, throughCarton: 1 }]]]);
+  // The cartons listed are those shown: they decide over a range that disagrees.
+  assert.deepEqual(pendingByClient([pendingEntry('d-1', [3, 4], { firstCarton: 2, lastCarton: 5 })])[0].items, [{ colisId: 'd-1', fromCarton: 3, throughCarton: 4 }]);
   assert.deepEqual(pendingByClient(undefined), []);
+});
+
+test('a validation files its notice on a dossier that still requests its purchase invoice', () => {
+  const asking = { id: 'd-ask', factures: [] };
+  const corrected = { id: 'd-fix', factures: [{ id: 'f-9', valide: false, fichier: 'colis/d-fix/f9.pdf', rejetMotif: 'Illisible' }] };
+  const documented = { id: 'd-ok', factures: [invoice] };
+  const received = { id: 'd-received', factures: [{ id: 'f-8', valide: false, fichier: 'colis/d-received/f8.pdf' }] };
+  const items = [{ colisId: 'd-ok', fromCarton: 1, throughCarton: 2 }, { colisId: 'd-ask', fromCarton: 1, throughCarton: 1 }, { colisId: 'd-received', fromCarton: 3, throughCarton: 3 },
+    { colisId: 'd-unknown', fromCarton: 1, throughCarton: 1 }, { colisId: 'd-fix', fromCarton: 2, throughCarton: 2 }];
+  const ids = list => list.map(item => item.colisId);
+  const byMap = new Map([asking, corrected, documented, received].map(dossier => [dossier.id, dossier]));
+  // Requested first (no invoice, an invoice to correct), each group in its incoming order; received ones and unknown dossiers after.
+  assert.deepEqual(ids(orderValidationItems(items, byMap)), ['d-ask', 'd-fix', 'd-ok', 'd-received', 'd-unknown']);
+  assert.deepEqual(ids(orderValidationItems(items, Object.fromEntries(byMap))), ['d-ask', 'd-fix', 'd-ok', 'd-received', 'd-unknown'], 'An object by id.');
+  assert.deepEqual(ids(orderValidationItems(items, [asking, corrected, documented, received])), ['d-ask', 'd-fix', 'd-ok', 'd-received', 'd-unknown'], 'The list of dossiers.');
+  assert.deepEqual(ids(orderValidationItems(items, id => byMap.get(id))), ['d-ask', 'd-fix', 'd-ok', 'd-received', 'd-unknown'], 'A lookup.');
+  assert.deepEqual(orderValidationItems(items, byMap)[0], { colisId: 'd-ask', fromCarton: 1, throughCarton: 1 }, 'The items themselves, unchanged.');
+  assert.deepEqual(ids(items), ['d-ok', 'd-ask', 'd-received', 'd-unknown', 'd-fix'], 'The list given is not reordered.');
+  assert.deepEqual(ids(orderValidationItems([items[0], items[2]], byMap)), ['d-ok', 'd-received'], 'Nothing requested: the incoming order.');
+  assert.deepEqual(orderValidationItems(null, byMap), []);
+  assert.deepEqual(ids(orderValidationItems(items)), ids(items), 'Without the dossiers: the incoming order.');
 });
 
 // ── Brouillon sheet ──────────────────────────────────────────────────────────
