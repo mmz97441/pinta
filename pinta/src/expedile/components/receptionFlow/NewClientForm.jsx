@@ -4,7 +4,7 @@ import { useApp } from '../../context/AppContext';
 import { newClientFieldErrors, refusedClientFields } from '../../domain/clientRequirements';
 import { firstNewClientField, newClientAlert } from '../../domain/receptionClient';
 import { Field, Note, invalidProps } from './ReceptionParts';
-import { definiteRefusal, newClientPayload } from './receptionFlowModel';
+import { definiteRefusal, newClientPayload, readableError } from './receptionFlowModel';
 import { refreshClientRecord } from './receptionData';
 
 // The quick creation of a client at the reception: the information the server requires for every client account
@@ -76,7 +76,7 @@ export default function NewClientForm({ values, createId, pending, onChange, onP
         if (mounted.current) {
           const refused = refusedClientFields(error);
           if (refused.length) { setErrors(Object.fromEntries(refused.map(key => [key, 'À corriger.']))); focus(refused[0]); }
-          setFailure({ message: error.message || 'Le client n’a pas été créé.' });
+          setFailure({ message: readableError(error, 'Le client n’a pas été créé. Vérifiez ses coordonnées, puis réessayez.', 'Réception · nouveau client') });
         }
       }
     } finally {

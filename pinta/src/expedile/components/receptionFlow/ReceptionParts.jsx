@@ -2,13 +2,13 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertTriangle, Check, CheckCircle2, Info, MessageSquare, X } from 'lucide-react';
 
-// Pieces shared by the four steps of the reception and by the arrival notices.
+// Pieces shared by the three steps of the reception and by the arrival notices.
 
-const STEPS = [['client', 'Client'], ['carton', 'Cartons'], ['validation', 'Validation']];
+const STEPS = [['client', 'Client'], ['carton', 'Cartons'], ['done', 'Rangement']];
 
-/** « Réceptionner des cartons », where the operator is (1 Client, 2 Cartons, 3 Validation) and « Fermer ». */
+/** « Réceptionner des cartons », where the operator is (1 Client, 2 Cartons, 3 Rangement) and « Fermer ». */
 export function StepHeader({ step, onClose }) {
-  const index = step === 'done' ? STEPS.length : Math.max(0, STEPS.findIndex(([key]) => key === step));
+  const index = Math.max(0, STEPS.findIndex(([key]) => key === step));
   // One row from 1280 px (title, steps, close); below, the steps take a row of their own under the title.
   return <header className="rf-header">
     <div className="mx-auto flex w-full max-w-5xl flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2 sm:gap-x-6 sm:px-6">
@@ -26,7 +26,7 @@ export function StepHeader({ step, onClose }) {
           </li>;
         })}
       </ol>
-      <p className="rf-muted w-full pb-1 text-[15px] font-semibold md:hidden">{step === 'done' ? 'Réception validée' : `Étape ${index + 1} sur 3 : ${STEPS[index][1]}`}</p>
+      <p className="rf-muted w-full pb-1 text-[15px] font-semibold md:hidden">{`Étape ${index + 1} sur ${STEPS.length} : ${STEPS[index][1]}`}</p>
     </div>
   </header>;
 }

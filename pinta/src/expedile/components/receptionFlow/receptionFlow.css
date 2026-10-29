@@ -24,6 +24,9 @@
   --rf-edge-shadow-strong: rgb(42 40 38 / .28);
   --rf-row-hover: #F6F3EC;
   color: var(--rf-text);
+  /* The containing block of what is positioned inside (the hidden announcements, .sr-only): kept within the scrolling
+     <main>, they never make the whole page taller, which a focus would then scroll (the menu sliding up). */
+  position: relative;
 }
 html.dark .rf {
   --rf-card: var(--bg-elevated);
@@ -50,6 +53,8 @@ html.dark .rf {
 }
 
 .rf-strong { color: var(--rf-strong); }
+/* A title given the focus when its part of the screen opens (never by the Tab key): no ring around a title. */
+.rf h2[tabindex='-1']:focus, .rf h2[tabindex='-1']:focus-visible { outline: none; }
 .rf-muted { color: var(--rf-muted); }
 .rf-card { background-color: var(--rf-card); border: 1px solid var(--rf-line); }
 .rf-line { border-color: var(--rf-line); }
@@ -79,6 +84,7 @@ html.dark .rf {
 .rf .rf-field:disabled { opacity: .7; }
 .rf-label { display: block; margin-bottom: 6px; font-size: 16px; font-weight: 700; color: var(--rf-text); }
 .rf-label-hint { font-weight: 500; color: var(--rf-muted); }
+.rf-problem-label { margin-right: 4px; font-size: 16px; font-weight: 700; color: var(--rf-text); }
 .rf-error { margin-top: 6px; font-size: 15px; font-weight: 600; color: var(--rf-invalid); }
 html:not(.dark) .rf-error { color: #B91C1C; }
 
@@ -86,6 +92,12 @@ html:not(.dark) .rf-error { color: #B91C1C; }
 .rf-primary { min-height: 64px; border-radius: 16px; font-size: 18px; font-weight: 800; line-height: 1.25; color: #FFFFFF; }
 @media (min-width: 640px) { .rf-primary { font-size: 20px; } }
 .rf-primary:disabled { opacity: .6; }
+/* « Valider N cartons et prévenir … »: the gold of « Réceptionner des cartons », navy text (6.5:1 or more in both
+   themes), apart from the navy « Ajouter ce carton » above it. */
+.rf-validate { min-height: 64px; border-radius: 16px; font-size: 18px; font-weight: 800; line-height: 1.25; color: #122A36; background-color: var(--rf-gold); }
+@media (min-width: 640px) { .rf-validate { font-size: 20px; } }
+.rf-validate:disabled { opacity: .6; }
+@media (hover: hover) { .rf-validate:hover:not(:disabled) { transform: translateY(-1px); } }
 .rf-secondary { min-height: 56px; border-radius: 16px; border: 2px solid var(--rf-strong); background-color: var(--rf-card); color: var(--rf-strong); font-size: 18px; font-weight: 700; }
 .rf-secondary:disabled { opacity: .6; }
 .rf-quiet { min-height: 44px; padding: 0 12px; color: var(--rf-muted); font-size: 16px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
@@ -94,8 +106,8 @@ html:not(.dark) .rf-error { color: #B91C1C; }
 .rf-small-action--invalid { border-color: var(--rf-invalid); }
 /* A file input hidden in its label: the label shows the keyboard focus. */
 label.rf-small-action:focus-within { outline: 3px solid var(--focus-ring); outline-offset: 3px; }
-.rf-primary, .rf-secondary, .rf-small-action { transition: transform .2s ease-out, opacity .2s ease-out; }
-.rf-primary:active:not(:disabled), .rf-secondary:active:not(:disabled), .rf-small-action:active:not(:disabled) { transform: scale(.98); }
+.rf-primary, .rf-validate, .rf-secondary, .rf-small-action { transition: transform .2s ease-out, opacity .2s ease-out; }
+.rf-primary:active:not(:disabled), .rf-validate:active:not(:disabled), .rf-secondary:active:not(:disabled), .rf-small-action:active:not(:disabled) { transform: scale(.98); }
 
 /* Tables at every width. The frame scrolls sideways when the columns need more room than the screen (never the page);
    the first column stays: an opaque surface, an edge line, and a shadow at its edge while columns slide under it. */
@@ -158,6 +170,12 @@ label.rf-small-action:focus-within { outline: 3px solid var(--focus-ring); outli
 .rf-chip { min-height: 44px; display: inline-flex; align-items: center; gap: 6px; padding: 0 14px; border-radius: 999px; border: 2px solid var(--rf-field-edge);
   background-color: var(--rf-card); color: var(--rf-text); font-size: 16px; font-weight: 600; }
 .rf-chip[aria-pressed='true'] { border-color: var(--rf-danger-text); background-color: var(--rf-danger-bg); color: var(--rf-danger-text); font-weight: 700; }
+/* « Produit interdit » closed while products are flagged: it says so in red. */
+.rf-chip[data-flagged='true'] { border-color: var(--rf-danger-text); color: var(--rf-danger-text); font-weight: 700; }
+.rf-chip[aria-expanded='true'] { border-color: var(--rf-strong); }
+
+/* « À valider », under the carton: a line between the two halves of the screen. */
+.rf-validation { border-top: 2px solid var(--rf-line); padding-top: 24px; }
 
 /* A choice between two (particulier, professionnel): the chosen one in navy. */
 .rf-toggle { min-height: 52px; min-width: 150px; padding: 0 18px; border-radius: 14px; border: 2px solid var(--rf-field-edge); background-color: var(--rf-card); color: var(--rf-text); font-size: 17px; font-weight: 700; }

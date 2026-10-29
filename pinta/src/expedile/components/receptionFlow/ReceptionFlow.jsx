@@ -7,17 +7,17 @@ import { receptionTarget } from '../../domain/brouillon';
 import { receptionAppendBlockReason, receptionAppendImpact } from '../../domain/reception';
 import { StepHeader, Note } from './ReceptionParts';
 import ClientStep from './ClientStep';
-import CartonStep from './CartonStep';
-import ValidationStep from './ValidationStep';
+import CartonsStep from './CartonsStep';
 import RangementStep from './RangementStep';
 import { useReceptionSession, useReceptionStart } from './useReceptionSession';
 import './receptionFlow.css';
 
-// « Réceptionner des cartons » (docs/specification-brouillon-reception-2026-10-28.md, « Réception »), in four steps
-// whose address is the state: /recevoir (1 · client), ?client=<id> or ?dossier=<id> (2 · carton), ?client=<id>&valider=1
-// (3 · validation), ?client=<id>&valide=<validation> (4 · rangement). What is typed or saved meanwhile lives in the
-// tab's session (useReceptionSession): a reload, or a tablet switched off and on, finds the reception where it was.
-const TITLES = { client: 'Réceptionner des cartons', carton: 'Réception · le carton', validation: 'Réception · validation', done: 'Réception validée' };
+// « Réceptionner des cartons » (docs/specification-brouillon-reception-2026-10-28.md, « Réception »), in three steps
+// whose address is the state: /recevoir (1 · client), ?client=<id> or ?dossier=<id> (2 · cartons: add them one after
+// the other, then validate them together on the same screen; ?valider=1 opens it to validate), ?client=<id>&valide=
+// <validation> (3 · rangement). What is typed or saved meanwhile lives in the tab's session (useReceptionSession): a
+// reload, or a tablet switched off and on, finds the reception where it was.
+const TITLES = { client: 'Réceptionner des cartons', carton: 'Réception · cartons', done: 'Réception validée' };
 
 /** The address of a step, keeping the way back (returnTo) of the page that opened the reception. */
 function flowHref(search, params) {
@@ -65,7 +65,8 @@ export default function ReceptionFlow() {
   const clientId = paramDossier?.clientId || params.get('client') || null;
   const client = clientId ? clients.find(item => item.id === clientId) || null : null;
   const validationId = params.get('valide');
-  const step = !clientId ? 'client' : validationId ? 'done' : params.get('valider') === '1' ? 'validation' : 'carton';
+  const step = !clientId ? 'client' : validationId ? 'done' : 'carton';
+  const validating = params.get('valider') === '1';
   useDocumentTitle(TITLES[step]);
 
   const { session, update, clear, storageAvailable } = useReceptionSession(client ? client.id : null);
@@ -93,12 +94,8 @@ export default function ReceptionFlow() {
     <div className="mx-auto w-full max-w-5xl px-4 pb-12 pt-5 sm:px-6">
       {client && !storageAvailable && <p role="status" className="rf-muted mb-3 text-[15px] font-semibold">Le navigateur ne conserve pas la saisie : gardez cet onglet ouvert jusqu’à la validation.</p>}
       {step === 'client' && <ClientStep start={start} updateStart={updateStart} onChoose={id => go({ client: id })} />}
-      {step === 'carton' && <CartonStep key={`${client.id}:${target.dossier?.id || 'new'}`} client={client} target={target} session={session} update={update}
-        onSaved={() => go({ client: client.id, valider: '1' })} onChangeClient={() => go({})}
-        onOpenValidation={() => go({ client: client.id, valider: '1' })} onChooseTarget={() => go({ client: client.id })} />}
-      {step === 'validation' && <ValidationStep key={client.id} client={client} session={session} update={update}
-        onAddCarton={() => go({ client: client.id })} onResumeCarton={() => go({ client: client.id })}
-        onValidated={id => go({ client: client.id, valide: id }, { replace: true })} />}
+      {step === 'carton' && <CartonsStep key={client.id} client={client} target={target} session={session} update={update} validating={validating}
+        onValidated={id => go({ client: client.id, valide: id }, { replace: true })} onChooseTarget={() => go({ client: client.id })} onChangeClient={() => go({})} />}
       {step === 'done' && <RangementStep key={validationId} client={client} session={session} update={update} validationId={validationId} onNext={next} onBrouillon={brouillon}
         onValidateRest={() => go({ client: client.id, valider: '1' })} />}
     </div>

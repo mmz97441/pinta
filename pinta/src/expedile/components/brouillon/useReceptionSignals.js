@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchArrivalNotices, fetchPendingReceptions, fetchReceptionPhotos } from '../../lib/receptionValidation';
+import { readableError } from '../../utils/readableError';
 
 // The receptions waiting for their validation and the arrival notices, as the server lists them
 // (lib/receptionValidation.js), for « Colis » and the Brouillon sheet. Read at mount, when the window comes
@@ -10,7 +11,8 @@ const EVERY_MINUTE = 60000;
 const MIN_GAP = 5000;
 const AFTER_DATA = 1500;
 const AFTER_FOCUS = 250;
-const reasonOf = error => String(error?.message || error || '').trim().replace(/[.\s]+$/, '') || 'lecture impossible';
+// The reason as the team can read it: a technical answer becomes « lecture impossible » (its detail in the console).
+const reasonOf = error => readableError(error, '', 'Colis · réceptions et avis').replace(/[.\s]+$/, '') || 'lecture impossible';
 const EMPTY = { pending: null, notices: null, photos: null, pendingError: '', noticesError: '', photosError: '', loading: true };
 
 /**

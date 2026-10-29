@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
-import { AlertCircle, AlertTriangle, Check, ChevronRight, PackagePlus, Plane, Search, X } from 'lucide-react';
+import { AlertCircle, AlertTriangle, Check, ChevronRight, MapPin, PackagePlus, Plane, Search, X } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { useMinuteNow } from '../../hooks/useMinuteNow';
 import useMediaQuery from '../../hooks/useMediaQuery';
@@ -10,7 +10,7 @@ import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import { canSeeDossierFinances } from '../../domain/dossierOverview';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
-import { COLIS_SORTS, COLIS_TABS, PAID_TOTAL_STATE, brouillonAlerts, colisRow, colisSortKey, colisTab, colisTabKey, colisTotals, filterColisRows, groupColisRowsByDeparture, pendingByColis, sortColisRows } from '../../domain/brouillon';
+import { COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_DESTINATION_GROUP_KEY, PAID_TOTAL_STATE, brouillonAlerts, colisRow, colisSearchMatch, colisSortKey, colisTab, colisTabKey, colisTotals, filterColisRows, groupColisRowsByDeparture, groupColisRowsByDestination, pendingByColis, sortColisRows } from '../../domain/brouillon';
 import { eur } from '../../utils/format';
 import WorkLoadError from '../workspace/WorkLoadError';
 import ColisAction from './ColisAction';
@@ -58,10 +58,14 @@ function Total({ total }) {
 // The column of amounts: what is still to pay, then what was paid.
 const TOTAL_HEADERS = { brouillon: 'Total à payer', a_payer: 'Total à payer', pret: 'Total payé', parti: 'Total' };
 
-/** The heading of a departure group, a line of the table: on a phone it stays in view while the table scrolls. */
+// The groups whose departure or destination is still to set: said in the colour of what is to check.
+const toSet = group => group.key === NO_DEPARTURE_GROUP_KEY || group.key === NO_DESTINATION_GROUP_KEY;
+
+/** The heading of a group (a departure, a destination), a line of the table: it stays in view while the table
+ * scrolls sideways. */
 function GroupHead({ group }) {
-  const none = group.key === NO_DEPARTURE_GROUP_KEY;
-  const Icon = none ? AlertCircle : Plane;
+  const none = toSet(group);
+  const Icon = none ? AlertCircle : group.key.startsWith('destination:') ? MapPin : Plane;
   return <span className="colis-group-head colis-keep-in-view">
     <span className="colis-group-title">
       <Icon size={20} aria-hidden="true" className="shrink-0" />
@@ -73,15 +77,30 @@ function GroupHead({ group }) {
   </span>;
 }
 
-function TableRow({ row, finances, link, returnTo, can, sheetId, openId, confirmation, onOpenPanel }) {
+/** The dimensions, under the cartons' weight and volume: one line per carton received (« 40 × 30 × 20 cm »), or,
+ * once prepared, per parcel to ship (« Préparé : »); « + 2 autres » past three lines. */
+function Dimensions({ id, dimensions }) {
+  // Nothing measured yet: the line above already says « À mesurer ».
+  if (!dimensions.prepared && dimensions.lines.every(line => line === MEASURE_MISSING_LABEL)) return null;
+  return <span className="colis-dims" data-dimensions={id}>
+    {dimensions.prepared && <span className="colis-dims-caption">Préparé{'\u00a0'}:</span>}
+    {dimensions.shown.map((line, index) => <span key={index} className="colis-dim-line" data-missing={line === MEASURE_MISSING_LABEL ? 'true' : undefined}>{line}</span>)}
+    {dimensions.moreLabel && <span className="colis-dims-caption">{dimensions.moreLabel}</span>}
+  </span>;
+}
+
+function TableRow({ row, match, finances, link, returnTo, can, sheetId, openId, confirmation, onOpenPanel }) {
   return <tr data-colis-row={row.id} data-stage={row.stage.key}>
     <th scope="row">
       <Link to={link(row)} className="colis-row-name" data-colis-name={row.id}>{row.clientName}</Link>
       <span className="colis-sub">{[row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
+      {/* Found by a number: which one, so the team sees why the line is there. */}
+      {match && <span className="colis-match" data-match={row.id}><Search size={15} aria-hidden="true" className="shrink-0" /><span>{match}</span></span>}
     </th>
     <td>
       <span className="colis-strong">{row.cartonsLabel} · {row.casier ? <>casier <span className="colis-code">{row.casier}</span></> : 'casier à renseigner'}</span>
       <span className="colis-sub">{measuresText(row)}</span>
+      <Dimensions id={row.id} dimensions={row.dimensions} />
     </td>
     <td>
       <StagePill stage={row.stage} />
@@ -149,8 +168,10 @@ export default function ColisHome() {
   const matches = useMemo(() => filterColisRows(rows, searchText), [rows, searchText]);
   const counts = useMemo(() => Object.fromEntries(COLIS_TABS.map(item => [item.key,
     searching ? filterColisRows(rowsOf(item.key), searchText).length : (dossiersByTab.get(item.key) || []).length])), [rowsOf, dossiersByTab, searching, searchText]);
-  const groups = useMemo(() => sortKey === 'depart' ? groupColisRowsByDeparture(sortColisRows(matches, 'nom', { now }), { now }) : null, [matches, sortKey, now]);
-  const sorted = useMemo(() => sortKey === 'depart' ? null : sortColisRows(matches, sortKey, { now }), [matches, sortKey, now]);
+  // « Par date d’envoi » and « Par destination »: groups, each with its line of totals; the other sorts: one list.
+  const groups = useMemo(() => sortKey === 'depart' ? groupColisRowsByDeparture(sortColisRows(matches, 'nom', { now }), { now })
+    : sortKey === 'destination' ? groupColisRowsByDestination(matches) : null, [matches, sortKey, now]);
+  const sorted = useMemo(() => groups ? null : sortColisRows(matches, sortKey, { now }), [groups, matches, sortKey, now]);
   const totals = useMemo(() => colisTotals(matches), [matches]);
   // Read at the screen's minute: a notice still on its way becomes « à vérifier » after ten minutes.
   const alerts = useMemo(() => brouillonAlerts({ pending: signals.pending || [], notices: notices || [], now }), [signals.pending, notices, now]);
@@ -230,7 +251,7 @@ export default function ColisHome() {
 
   const sheetId = 'feuille-message';
   const rowProps = { finances, link: ficheLink, returnTo, can, sheetId, openId: sheet?.id || null, onOpenPanel: openSheet };
-  const lineProps = row => ({ row, confirmation: confirmations[row.id] || null, ...rowProps });
+  const lineProps = row => ({ row, match: searching ? colisSearchMatch(row, searchText) : null, confirmation: confirmations[row.id] || null, ...rowProps });
   const signalProblem = signals.pendingError && signals.noticesError
     ? `Les réceptions à valider et les avis d’arrivée n’ont pas pu être vérifiés (${signals.pendingError}).`
     : signals.pendingError ? `Les réceptions à valider n’ont pas pu être vérifiées (${signals.pendingError}).`
@@ -253,7 +274,7 @@ export default function ColisHome() {
         </tr></thead>
         {groups
           ? groups.map(group => <tbody key={group.key}>
-            <tr className="colis-group-row" data-none={group.key === NO_DEPARTURE_GROUP_KEY ? 'true' : undefined}><th scope="rowgroup" colSpan={finances ? 5 : 4}><GroupHead group={group} /></th></tr>
+            <tr className="colis-group-row" data-group={group.key} data-none={toSet(group) ? 'true' : undefined}><th scope="rowgroup" colSpan={finances ? 5 : 4}><GroupHead group={group} /></th></tr>
             {group.rows.map(row => <TableRow key={row.id} {...lineProps(row)} />)}
           </tbody>)
           : <tbody>{sorted.map(row => <TableRow key={row.id} {...lineProps(row)} />)}</tbody>}
@@ -295,10 +316,10 @@ export default function ColisHome() {
 
     <div className="colis-toolbar">
       <div className="colis-search" data-filled={searchText ? 'true' : undefined}>
-        <label htmlFor={searchId} className="sr-only">Chercher un client, une référence, un casier ou un numéro de suivi</label>
+        <label htmlFor={searchId} className="sr-only">Chercher par nom, numéro de colis, numéro de suivi ou numéro d’expédition</label>
         <Search size={22} aria-hidden="true" className="colis-search-icon" />
         <input ref={searchField} id={searchId} type="search" value={searchText} onChange={event => changeSearch(event.target.value)} onKeyDown={onSearchKey}
-          placeholder="Chercher un client ou un carton" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" />
+          placeholder="Nom, n° de colis ou d’expédition" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" />
         {searchText && <button type="button" aria-label="Effacer la recherche" className="colis-search-clear" onClick={() => { changeSearch(''); searchField.current?.focus(); }}><X size={20} aria-hidden="true" /></button>}
       </div>
       {wide
@@ -319,7 +340,7 @@ export default function ColisHome() {
       </section>
         : <section className="colis-empty" aria-labelledby="colis-vide">
           <h2 id="colis-vide">Aucun dossier de l’onglet {tab.label} ne correspond à « {searchText.trim()} »</h2>
-          <p>{elsewhere.length ? 'Ce que vous cherchez se trouve dans un autre onglet.' : 'Vérifiez l’orthographe, ou cherchez par référence, casier ou numéro de suivi.'}</p>
+          <p>{elsewhere.length ? 'Ce que vous cherchez se trouve dans un autre onglet.' : 'Vérifiez l’orthographe, ou cherchez par numéro de colis, de suivi ou d’expédition.'}</p>
           <div className="colis-empty-actions">
             {elsewhere.map(item => <Link key={item.key} to={listUrl({ onglet: item.key, q: searchText })} replace className="colis-action w-auto px-5">Voir {plural(item.count, 'dossier', 'dossiers')} dans {item.label}</Link>)}
             <button type="button" onClick={() => { changeSearch(''); searchField.current?.focus(); }} className="colis-secondary">Effacer la recherche</button>

@@ -5,7 +5,7 @@ import { useApp } from '../../context/AppContext';
 import { arrivalNoticeState, arrivalNoticeSummary } from '../../domain/brouillon';
 import { deliverMessage } from '../../services/telegramApi';
 import { Note } from './ReceptionParts';
-import { count, firstName, noticeMailto, parisWhen } from './receptionFlowModel';
+import { count, firstName, noticeMailto, parisWhen, readableError } from './receptionFlowModel';
 
 // The state of an arrival notice (arrivalNoticeState) and its one action: « Réessayer » for a Telegram notice not
 // delivered (after checking in Telegram: retryConfirmed) or never taken by the automatic sending (« Envoi à
@@ -41,7 +41,7 @@ export function NoticeActions({ notice, client, onChanged, compact = false, now 
       setFeedback(result?.ok ? { tone: 'success', text: 'Telegram a confirmé l’envoi.' }
         : { tone: 'danger', text: `${still} : ${String(result?.error || 'Telegram n’a pas confirmé l’envoi').replace(/[.\s]+$/, '')}.` });
     } catch (error) {
-      setFeedback({ tone: 'danger', text: `${still} : ${error.message || 'réseau indisponible'}.` });
+      setFeedback({ tone: 'danger', text: `${still} : ${readableError(error, 'réseau indisponible', 'Avis · réessayer').replace(/[.\s]+$/, '')}.` });
     } finally {
       setBusy(false);
       onChanged?.();

@@ -5,7 +5,16 @@ import { RECEPTION_MEASURES, receptionAppendImpact, receptionCartonManifest } fr
 import { getDestByCP } from '../../constants';
 
 export const MEASURES = RECEPTION_MEASURES;
-export const EMPTY_CARTON = Object.freeze({ casier: '', tracking: '', fournisseur: '', dimL: '', dimW: '', dimH: '', poids: '', abime: false, note: '', interdits: [], photoName: '' });
+// interditsOpen: the list of the forbidden products is open (« Signaler un problème »), kept with the typing.
+export const EMPTY_CARTON = Object.freeze({ casier: '', tracking: '', fournisseur: '', dimL: '', dimW: '', dimH: '', poids: '', abime: false, note: '', interdits: [], photoName: '', interditsOpen: false });
+
+/** Whether a carton is being typed (a number, a measure, a problem flagged), which a validation would leave out. The
+ * locker of a new brouillon is not a carton: it may be typed ahead. */
+export function formHasTyping(form) {
+  if (!form) return false;
+  return ['tracking', 'fournisseur', 'dimL', 'dimW', 'dimH', 'poids', 'note'].some(key => String(form[key] ?? '').trim() !== '')
+    || Boolean(form.abime) || (Array.isArray(form.interdits) && form.interdits.length > 0);
+}
 
 const text = value => typeof value === 'string' ? value.trim() : '';
 
@@ -62,7 +71,7 @@ export function cartonFieldErrors(form, { needsCasier = false, hasPhoto = false,
     if (!value) errors[key] = MEASURE_ERRORS[key][0];
     else if (parseMeasure(value) === null) errors[key] = MEASURE_ERRORS[key][1];
   }
-  if (form.abime && !hasPhoto) errors.photo = 'Prenez une photo du carton abîmé, ou décochez « Carton abîmé ou ouvert ».';
+  if (form.abime && !hasPhoto) errors.photo = 'Prenez une photo du carton abîmé. S’il ne l’est pas, touchez à nouveau « Carton abîmé ou ouvert ».';
   return errors;
 }
 
@@ -133,6 +142,9 @@ export function definiteRefusal(error) {
   const code = typeof error?.code === 'string' ? error.code : '';
   return /^[0-9A-Z]{5}$/.test(code) || /^PGRST/.test(code);
 }
+
+// The message of an error as the team can read it (utils/readableError.js).
+export { readableError } from '../../utils/readableError';
 
 /** A refusal of the server without its advice to refresh (« … : actualisez la liste. », « Actualisez avant de
  * valider. »), whatever its case: the screen reads the list again by itself and says so. */

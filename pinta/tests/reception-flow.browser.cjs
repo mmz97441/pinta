@@ -1,5 +1,6 @@
 /* « Réceptionner des cartons » (/recevoir) and « Avis d’arrivée » (/avis), docs/specification-brouillon-reception-2026-10-28.md:
- * the four steps of a reception, the grouped arrival notice and its states, phone and tablet, light and dark. The
+ * the three steps of a reception (client, cartons added then validated on one screen, rangement), the grouped arrival
+ * notice and its states, phone and tablet, light and dark. The
  * server's commands are mocked here as the migrations write them (append_reception_cartons and its receipts,
  * list_pending_receptions, validate_reception and its first carton, list_arrival_notices, add_reception_photo,
  * send-telegram, the photo bucket, the unique identifiers of clients and dossiers): nothing leaves the machine.
@@ -349,13 +350,24 @@ async function fillCarton(page, { casier, tracking, vendor, measures }) {
 async function chooseClient(page, query, name) {
   await page.getByLabel('Nom, téléphone ou numéro client').fill(query);
   await page.getByRole('table', { name: /^Clients trouvés/ }).getByRole('button', { name: `Choisir ${name}` }).click();
-  await page.getByRole('heading', { level: 2, name: /^Le (premier )?carton$/ }).waitFor();
+  await page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
 }
+/** « À valider : 3 cartons ». */
+const toValidate = total => `À valider : ${total} ${total > 1 ? 'cartons' : 'carton'}`;
+/** « Signaler un problème » : « Produit interdit » opens the list of the products, « Carton abîmé ou ouvert » toggles. */
+async function flagForbidden(page, product) {
+  const toggle = page.getByRole('button', { name: /^Produit interdit/ });
+  if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+  await page.getByRole('button', { name: product, exact: true }).click();
+}
+const damagedToggle = page => page.getByRole('button', { name: 'Carton abîmé ou ouvert', exact: true });
 /** The row of a table whose header cell (first column) is `name`. */
 const rowOf = (scope, name) => scope.getByRole('row').filter({ has: scope.page().getByRole('rowheader', { name }) });
-async function addCarton(page) {
+/** « Ajouter ce carton », then the list below it holds `total` cartons to validate (read again from the server). */
+async function addCarton(page, total) {
   await page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
-  await page.getByRole('heading', { level: 2, name: /^Cette réception : \d+ cartons?$/ }).waitFor();
+  await page.getByRole('heading', { level: 2, name: toValidate(total), exact: true }).waitFor();
+  await page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).waitFor();
 }
 
 /** Text of 15 px or more, targets of 44 px or more (56 px for the reception's main buttons), no horizontal scroll of
@@ -431,10 +443,10 @@ async function checkScreen(f, label) {
       .filter(element => !(element.matches('input[type="checkbox"], input[type="file"]')) && !element.classList.contains('rf-note-link') && shown(element));
     const tooSmall = controls.map(element => ({ element, box: element.getBoundingClientRect() }))
       .filter(({ box }) => box.height < 43.5 || box.width < 43.5).map(({ element, box }) => `${(element.getAttribute('aria-label') || element.textContent || element.id).trim().slice(0, 40)} (${Math.round(box.width)}×${Math.round(box.height)})`);
-    const mainTooSmall = [...root.querySelectorAll('.rf-primary, .rf-secondary')].filter(shown).map(element => ({ element, box: element.getBoundingClientRect() }))
+    const mainTooSmall = [...root.querySelectorAll('.rf-primary, .rf-validate, .rf-secondary')].filter(shown).map(element => ({ element, box: element.getBoundingClientRect() }))
       .filter(({ box }) => box.height < 55.5).map(({ element, box }) => `${element.textContent.trim().slice(0, 40)} (${Math.round(box.height)})`);
     // Actions are written from 17 px (the discreet « Valider sans prévenir » aside).
-    const smallActions = [...root.querySelectorAll('.rf-primary, .rf-secondary, .rf-small-action, .rf-toggle')].filter(shown)
+    const smallActions = [...root.querySelectorAll('.rf-primary, .rf-validate, .rf-secondary, .rf-small-action, .rf-toggle')].filter(shown)
       .filter(element => parseFloat(getComputedStyle(element).fontSize) < 17).map(element => element.textContent.trim().slice(0, 40));
     const clone = root.cloneNode(true);
     clone.querySelectorAll('pre.rf-message').forEach(node => node.remove());
@@ -453,7 +465,9 @@ async function checkScreen(f, label) {
           covered.push(`${heading.textContent.trim()} under ${(control.textContent || control.id).trim().slice(0, 30)}`);
       }
     }
-    return { small, tooSmall, mainTooSmall, smallActions, emoji, covered, overflowX: document.documentElement.scrollWidth > innerWidth + 1 || (main ? main.scrollWidth > main.clientWidth + 1 : false) };
+    return { small, tooSmall, mainTooSmall, smallActions, emoji, covered, overflowX: document.documentElement.scrollWidth > innerWidth + 1 || (main ? main.scrollWidth > main.clientWidth + 1 : false),
+      // Only <main> scrolls: nothing positioned inside it makes the whole page taller (a focus would slide the menu up).
+      pageTaller: document.documentElement.scrollHeight > innerHeight + 1 };
   });
   assert.deepEqual(report.covered, [], `${label}: titles neither covered nor cut`);
   assert.deepEqual(report.smallActions, [], `${label}: actions of 17 px or more`);
@@ -462,6 +476,7 @@ async function checkScreen(f, label) {
   assert.deepEqual(report.mainTooSmall, [], `${label}: main reception buttons of 56 px or more`);
   assert.equal(report.emoji, '', `${label}: no emoji in the interface`);
   assert.equal(report.overflowX, false, `${label}: no horizontal scroll`);
+  assert.equal(report.pageTaller, false, `${label}: only the main area scrolls`);
   const axe = await new AxeBuilder({ page: f.page }).include('.rf').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
   assert.deepEqual(axe.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => node.target.join(' ')).slice(0, 4) })), [], `${label}: no accessibility violation`);
   return tables.found;
@@ -567,7 +582,7 @@ async function scenario(browser, name, options, run) {
       await checkScreen(f, 'step 1 new client');
       await snap(f, 'tablette-clair-1b-nouveau-client');
       await form.getByRole('button', { name: 'Créer le client' }).click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       const created = f.tables.clients.find(row => row.email === 'flavie.payet@example.test');
       assert.ok(created, 'the client is created through the API');
       const creations = requestsTo(f, '/rest/v1/clients');
@@ -575,7 +590,10 @@ async function scenario(browser, name, options, run) {
       assert.match(creations[0].input.id, /^[0-9a-f-]{36}$/, 'the client is created under the identifier of its form');
       assert.equal(created.id, creations[0].input.id);
       assert.equal(new URL(f.page.url()).searchParams.get('client'), created.id);
-      await f.page.getByText('Aucun brouillon en cours : ce carton en ouvre un nouveau.').waitFor();
+      await f.page.getByText('Aucun brouillon en cours : le premier carton en ouvre un nouveau.').waitFor();
+      // Nothing to validate yet: the list below the form says where the cartons will gather.
+      await f.page.getByRole('heading', { level: 2, name: 'À valider', exact: true }).waitFor();
+      await f.page.getByText('Les cartons que vous ajoutez s’affichent ici. Vous les validez ensuite tous ensemble : Flavie recevra un seul message.').waitFor();
       assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-casier', 'the locker of a new brouillon takes the focus');
       // The client links Telegram meanwhile (invitation): the validation reads the client again and uses Telegram.
       created.telegram_chat_id = 'chat-flavie';
@@ -589,7 +607,7 @@ async function scenario(browser, name, options, run) {
       assert.equal(await f.page.getByLabel(/^Casier/).inputValue(), 'B-07', 'the locker is written in capitals');
       await checkScreen(f, 'step 2 new brouillon');
       await snap(f, 'tablette-clair-2b-premier-carton');
-      await addCarton(f.page);
+      await addCarton(f.page, 1);
       const inserts = requestsTo(f, '/rest/v1/colis');
       assert.equal(inserts.length, 1);
       const insert = inserts[0].input;
@@ -598,29 +616,41 @@ async function scenario(browser, name, options, run) {
         { client: created.id, statut: 'mesure', casier: 'B-07', trackings: ['LP00498821'], details: [{ number: 'LP00498821', fournisseur: 'Shein' }], boxes: [{ dimL: 45, dimW: 32, dimH: 20, poids: 2.4 }], count: 1, checks: [], prohibited: false });
       const dossier = f.tables.colis.find(row => row.id === insert.id);
       const insertedRevision = dossier.updated_at;
-      await f.page.getByText(`Carton n° 1 enregistré dans ${dossier.ref} (nouveau brouillon).`).waitFor();
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
+      await f.page.locator('.rf-saved').getByText(`Carton n° 1 enregistré dans ${dossier.ref} (nouveau brouillon).`).waitFor();
 
-      // Carton 2 joins the same brouillon.
-      await f.page.getByRole('button', { name: 'Ajouter un autre carton pour Flavie' }).click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      // Carton 2, on the same screen: the form is empty again, ready for the next scan, and joins the same brouillon.
       await f.page.getByText('Brouillon en cours : 1 carton · Casier B-07').waitFor();
       assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-tracking', 'the tracking number takes the focus');
+      assert.deepEqual([await f.page.getByLabel(/^Numéro de suivi/).inputValue(), await f.page.getByLabel('Poids (kg)', { exact: true }).inputValue()], ['', ''], 'the form is empty for the next carton');
+      assert.equal(await f.page.getByLabel(/^Casier/).count(), 0, 'the brouillon has its locker now');
       await fillCarton(f.page, { vendor: 'Amazon', measures: ['30', '25', '15', '1.1'] });
-      await addCarton(f.page);
+      await addCarton(f.page, 2);
       const appends = requestsTo(f, '/rpc/append_reception_cartons');
       assert.equal(appends.length, 1);
       assert.equal(appends[0].input.p_colis_id, dossier.id);
       assert.equal(appends[0].input.p_expected_updated_at, insertedRevision, 'the addition names the revision it saw');
       assert.deepEqual(appends[0].input.p_cartons, [{ dimL: 30, dimW: 25, dimH: 15, poids: 1.1, fournisseur: 'Amazon', tracking: '' }]);
       assert.match(appends[0].input.p_request_id, /^[0-9a-f-]{36}$/);
-      await f.page.getByRole('heading', { name: 'Cette réception : 2 cartons' }).waitFor();
-      await f.page.getByText('En validant, Flavie reçoit un seul message Telegram pour 2 colis.').waitFor();
-      await checkScreen(f, 'step 3 telegram');
-      await snap(f, 'tablette-clair-3-validation-telegram');
+      await f.page.locator('.rf-saved').getByText(`Carton n° 2 enregistré dans ${dossier.ref}.`).waitFor();
+      const listed = f.page.getByRole('table', { name: /^Cartons à valider/ });
+      assert.match(await rowOf(listed, 'Carton 1').innerText(), /Shein\s+LP00498821\s+45\s×\s32\s×\s20\scm\s+2,4\skg/);
+      assert.match(await rowOf(listed, 'Carton 2').innerText(), /Amazon\s+Sans numéro de suivi\s+30\s×\s25\s×\s15\scm\s+1,1\skg/);
+      await f.page.getByText('Flavie recevra un seul message Telegram pour 2 colis.').waitFor();
+      await checkScreen(f, 'step 2 two cartons to validate');
+      await snap(f, 'tablette-clair-2c-deux-cartons-a-valider');
+
+      // A third carton being typed is not validated with the others: the list says so instead of validating.
+      await fillCarton(f.page, { tracking: 'LP-OUBLIE' });
+      const typing = f.page.getByRole('note').filter({ hasText: 'Un carton est en cours de saisie' });
+      await typing.waitFor();
+      assert.equal(await f.page.getByRole('button', { name: /^Valider 2 cartons/ }).count(), 0, 'no validation while a carton is being typed');
+      await checkScreen(f, 'step 2 carton being typed');
+      await typing.getByRole('button', { name: 'Effacer la saisie' }).click();
+      assert.equal(await f.page.getByLabel(/^Numéro de suivi/).inputValue(), '', 'the typing is cleared');
+      assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-validation-title', 'the list keeps the focus');
 
       // One tap: one validation, one message for the two cartons, delivered at once.
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Flavie' }).click();
+      await f.page.getByRole('button', { name: 'Valider 2 cartons et prévenir Flavie', exact: true }).click();
       await f.page.getByRole('heading', { level: 2, name: `Réception validée : 2 colis ajoutés au brouillon de Flavie Payet` }).waitFor();
       const validations = requestsTo(f, '/rpc/validate_reception');
       assert.equal(validations.length, 1);
@@ -638,8 +668,9 @@ async function scenario(browser, name, options, run) {
       await f.page.getByText('B-07', { exact: true }).waitFor();
       await f.page.getByText('Message Telegram envoyé à Flavie · 2 colis').waitFor();
       await f.page.getByText('Rangez-les dans le casier').waitFor();
-      await checkScreen(f, 'step 4 telegram');
-      await snap(f, 'tablette-clair-4-rangement-telegram');
+      assert.match(await f.page.locator('ol[aria-label="Étapes de la réception"] [aria-current="step"]').innerText(), /^3\s*Rangement$/, 'the third and last step');
+      await checkScreen(f, 'step 3 telegram');
+      await snap(f, 'tablette-clair-3-rangement-telegram');
       await f.page.getByRole('button', { name: 'Client suivant' }).click();
       await f.page.getByRole('heading', { level: 2, name: 'Pour quel client ?' }).waitFor();
       assert.equal(await f.page.getByLabel('Nom, téléphone ou numéro client').inputValue(), '', 'the next client starts from an empty search');
@@ -660,23 +691,23 @@ async function scenario(browser, name, options, run) {
       await snap(f, 'telephone-sombre-1-client');
       // The whole line answers the tap, its action waiting on the right of the phone.
       await result.getByRole('rowheader').click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await f.page.getByText('Il faudra redemander l’accord du client et vérifier la préparation avec le nouveau carton.', { exact: false }).waitFor();
       assert.equal(await f.page.getByLabel(/^Casier/).count(), 0, 'the brouillon keeps its locker');
       await fillCarton(f.page, { tracking: 'TBA3021991100', vendor: 'Amazon', measures: ['30', '25', '15', '1,1'] });
-      const lithium = f.page.getByRole('button', { name: 'Batteries lithium' });
-      await lithium.click();
-      assert.equal(await lithium.getAttribute('aria-pressed'), 'true');
+      await flagForbidden(f.page, 'Batteries lithium');
+      assert.equal(await f.page.getByRole('button', { name: 'Batteries lithium' }).getAttribute('aria-pressed'), 'true');
       await f.page.getByText(/^Produit interdit signalé : Batteries lithium/).waitFor();
       await checkScreen(f, 'phone dark step 2');
       await snap(f, 'telephone-sombre-2-carton');
-      await addCarton(f.page);
+      await addCarton(f.page, 1);
       const append = requestsTo(f, '/rpc/append_reception_cartons')[0].input;
       assert.deepEqual({ dossier: append.p_colis_id, cartons: append.p_cartons, checks: append.p_check_interdits, casier: append.p_casier, notes: append.p_notes_reception, expected: append.p_expected_updated_at },
         { dossier: ids.P, cartons: [{ dimL: 30, dimW: 25, dimH: 15, poids: 1.1, fournisseur: 'Amazon', tracking: 'TBA3021991100' }], checks: ['Batteries lithium'], casier: null, notes: null, expected: '2026-09-09T08:00:00Z' });
       assert.equal(f.tables.colis[0].produit_interdit, true, 'the forbidden product reaches the server');
-      await f.page.getByText('Déjà en stock : 2 cartons · Casier A-03').waitFor();
-      await f.page.getByText(/^En validant, l’e-mail pour Camille est préparé pour 1 colis/).waitFor();
+      await f.page.getByText('Brouillon en cours : 3 cartons · Casier A-03').waitFor();
+      assert.equal(await f.page.getByRole('button', { name: /^Produit interdit/ }).getAttribute('aria-expanded'), 'false', 'the next carton starts without a problem flagged');
+      await f.page.getByText(/^L’e-mail pour Camille sera préparé pour 1 colis/).waitFor();
       // The forbidden product is not in the notice: the team is reminded to tell the client from the conversation.
       const reminder = f.page.getByRole('note').filter({ hasText: 'À signaler à Camille vous-même' });
       const flaggedRow = rowOf(reminder, 'Carton 3');
@@ -684,9 +715,9 @@ async function scenario(browser, name, options, run) {
       await reminder.getByText('L’avis d’arrivée n’en parle pas : prévenez Camille depuis la conversation du dossier.').waitFor();
       assert.equal(await flaggedRow.getByRole('link', { name: 'Ouvrir la conversation du dossier EXP-TEST-001' }).getAttribute('href'),
         `/colis/${ids.P}?onglet=conversation&returnTo=${encodeURIComponent(`/recevoir?client=${ids.C}&valider=1`)}`);
-      await checkScreen(f, 'phone dark step 3');
-      await snap(f, 'telephone-sombre-3-validation-email');
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await checkScreen(f, 'phone dark step 2 to validate');
+      await snap(f, 'telephone-sombre-2b-a-valider-email');
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByRole('heading', { level: 2, name: 'Réception validée : 1 colis ajouté au brouillon de Camille Exemple' }).waitFor();
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
       assert.deepEqual({ canal: sent.p_canal, template: sent.p_template, items: sent.p_items }, { canal: 'email', template: 'arrivee_colis', items: [{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }] });
@@ -700,8 +731,8 @@ async function scenario(browser, name, options, run) {
       assert.equal(await f.page.evaluate(() => navigator.clipboard.readText()), sent.p_text, 'the text copied is the recorded notice');
       const mailto = await f.page.getByRole('link', { name: 'Préparer l’e-mail' }).getAttribute('href');
       assert.match(mailto, /^mailto:camille@example\.test\?subject=Votre%20colis%20est%20arriv%C3%A9%20chez%20Exped%C3%AEle&body=Bonjour%20Camille/);
-      await checkScreen(f, 'phone dark step 4');
-      await snap(f, 'telephone-sombre-4-rangement-email');
+      await checkScreen(f, 'phone dark step 3');
+      await snap(f, 'telephone-sombre-3-rangement-email');
       await f.page.getByRole('button', { name: 'Voir le Brouillon' }).click();
       await f.page.waitForURL(url => url.pathname === '/');
     });
@@ -715,34 +746,34 @@ async function scenario(browser, name, options, run) {
       assert.match(await result.innerText(), /Aucun brouillon en cours/);
       assert.match(await result.innerText(), /Nouveau brouillon/);
       await result.getByRole('button', { name: 'Choisir Hoarau Jean' }).click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
-      await f.page.getByText('Vous validerez ensuite la réception.', { exact: false }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
+      await f.page.getByText('Le brouillon est créé avec ce carton. Ajoutez les suivants, puis validez-les ensemble.', { exact: true }).waitFor();
       await fillCarton(f.page, { casier: 'C-12', measures: ['50', '40', '30', '6'] });
       await checkScreen(f, 'phone light step 2');
       await snap(f, 'telephone-clair-2-premier-carton');
-      await addCarton(f.page);
+      await addCarton(f.page, 1);
       await f.page.getByText('Jean n’a ni Telegram ni e-mail : la réception sera validée sans avis.', { exact: false }).waitFor();
       assert.equal(await f.page.getByRole('button', { name: /prévenir Jean/ }).count(), 0, 'no notice is offered without a contact');
       assert.equal(await f.page.getByRole('link', { name: 'Compléter sa fiche' }).getAttribute('href'), `/clients/${H}`);
-      await checkScreen(f, 'phone light step 3 without contact');
-      await snap(f, 'telephone-clair-3-validation-sans-contact');
+      await checkScreen(f, 'phone light step 2 without contact');
+      await snap(f, 'telephone-clair-2b-validation-sans-contact');
       // Validating without a notice is confirmed; « Annuler » sends nothing.
-      await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Valider 1 carton sans prévenir', exact: true }).click();
       const dialog = f.page.getByRole('dialog', { name: 'Valider sans prévenir Jean ?' });
       await dialog.getByText('Aucun avis ne sera envoyé pour ces cartons.').waitFor();
-      await snap(f, 'telephone-clair-3-confirmation-sans-avis');
+      await snap(f, 'telephone-clair-2c-confirmation-sans-avis');
       await dialog.getByRole('button', { name: 'Annuler' }).click();
       await dialog.waitFor({ state: 'detached' });
       assert.equal(requestsTo(f, '/rpc/validate_reception').length, 0, 'nothing is validated without the confirmation');
-      await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      await f.page.getByRole('button', { name: 'Valider 1 carton sans prévenir', exact: true }).click();
       await dialog.getByRole('button', { name: 'Valider sans prévenir' }).click();
       await f.page.getByText('Réception validée sans avis : le client n’est pas prévenu').waitFor();
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
       assert.deepEqual({ notify: sent.p_notify, canal: sent.p_canal, template: sent.p_template, text: sent.p_text }, { notify: false, canal: null, template: null, text: null });
       assert.equal(f.tables.messages.length, 0);
       await f.page.getByText('C-12', { exact: true }).waitFor();
-      await checkScreen(f, 'phone light step 4 without notice');
-      await snap(f, 'telephone-clair-4-rangement-sans-avis');
+      await checkScreen(f, 'phone light step 3 without notice');
+      await snap(f, 'telephone-clair-3-rangement-sans-avis');
     });
 
     await scenario(browser, 'reprise-apres-rechargement-et-cartons-abimes-avec-photos', { layout: TABLET }, async f => {
@@ -750,21 +781,21 @@ async function scenario(browser, name, options, run) {
       const uploads = await photoBucket(f);
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}`);
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await fillCarton(f.page, { tracking: 'COLISSIMO-778', vendor: 'Zara', measures: ['44', '33'] });
-      await f.page.getByRole('button', { name: 'Aérosols' }).click();
-      await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).check();
+      await flagForbidden(f.page, 'Aérosols');
+      await damagedToggle(f.page).click();
       await f.page.getByLabel(/^Ce que vous constatez/).fill('Coin enfoncé');
       assert.ok(await f.page.evaluate(() => Object.keys(sessionStorage).some(key => key.includes('reception-flow'))), 'the typing is kept in the tab');
       await f.page.reload();
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       assert.deepEqual([await f.page.getByLabel(/^Numéro de suivi/).inputValue(), await f.page.getByLabel(/^Vendu par/).inputValue(), await f.page.getByLabel('Longueur (cm)', { exact: true }).inputValue(), await f.page.getByLabel('Largeur (cm)', { exact: true }).inputValue()],
         ['COLISSIMO-778', 'Zara', '44', '33'], 'the carton being typed survives a reload');
       assert.equal(await f.page.getByRole('button', { name: 'Aérosols' }).getAttribute('aria-pressed'), 'true');
-      assert.equal(await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).isChecked(), true);
+      assert.equal(await damagedToggle(f.page).getAttribute('aria-pressed'), 'true');
       await fillCarton(f.page, { measures: [null, null, '22', '3'] });
       await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
-      await f.page.getByText('Prenez une photo du carton abîmé, ou décochez « Carton abîmé ou ouvert ».').waitFor();
+      await f.page.getByText('Prenez une photo du carton abîmé. S’il ne l’est pas, touchez à nouveau « Carton abîmé ou ouvert ».').waitFor();
       assert.equal(requestsTo(f, '/rpc/append_reception_cartons').length, 0, 'a damaged carton waits for its photo');
       // An image the server would not keep is refused at once.
       await f.page.locator('input[type="file"]').nth(1).setInputFiles({ name: 'carton.gif', mimeType: 'image/gif', buffer: Buffer.from('GIF89a') });
@@ -773,7 +804,7 @@ async function scenario(browser, name, options, run) {
       await f.page.getByRole('img', { name: 'Photo du carton abîmé' }).waitFor();
       await checkScreen(f, 'tablet light damaged carton');
       await snap(f, 'tablette-clair-2-carton-abime');
-      await addCarton(f.page);
+      await addCarton(f.page, 1);
       const append = requestsTo(f, '/rpc/append_reception_cartons')[0].input;
       assert.equal(append.p_notes_reception, 'Carton n° 3 (Zara, COLISSIMO-778) abîmé ou ouvert à la réception : Coin enfoncé.');
       assert.deepEqual(append.p_check_interdits, ['Aérosols']);
@@ -786,17 +817,17 @@ async function scenario(browser, name, options, run) {
       const photoPatches = () => f.requests.filter(request => request.method === 'PATCH' && request.path === '/rest/v1/colis' && request.input?.photo_reception === true);
       assert.equal(photoPatches().length, 1);
       assert.equal(photoPatches()[0].input.photo_reception_url, uploads[0]);
-      await f.page.getByText(`Carton n° 3 enregistré dans EXP-TEST-001.`).waitFor();
+      await f.page.locator('.rf-saved').getByText(`Carton n° 3 enregistré dans EXP-TEST-001.`).waitFor();
 
       // A second damaged carton, photographed by the camera (a file without extension): its own photo, the dossier's
-      // photo unchanged.
-      await f.page.getByRole('button', { name: 'Ajouter un autre carton pour Camille' }).click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      // photo unchanged. The form was emptied: neither the damage nor the forbidden product of carton n° 3 remain.
+      assert.equal(await damagedToggle(f.page).getAttribute('aria-pressed'), 'false');
+      assert.equal(await f.page.getByRole('img', { name: 'Photo du carton abîmé' }).count(), 0);
       await fillCarton(f.page, { tracking: 'COLISSIMO-779', vendor: 'Zara', measures: ['40', '30', '20', '2'] });
-      await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).check();
+      await damagedToggle(f.page).click();
       await f.page.locator('#rf-photo-camera').setInputFiles({ name: 'image', mimeType: 'image/jpeg', buffer: PNG });
       await f.page.getByRole('img', { name: 'Photo du carton abîmé' }).waitFor();
-      await addCarton(f.page);
+      await addCarton(f.page, 2);
       assert.equal(uploads.length, 2);
       assert.match(uploads[1], new RegExp(`^${ids.P}/[0-9a-f-]{36}\\.jpg$`), 'the stored file is named after its type');
       assert.deepEqual(requestsTo(f, '/rpc/add_reception_photo')[1].input, { p_colis_id: ids.P, p_carton: 4, p_path: uploads[1] });
@@ -811,8 +842,8 @@ async function scenario(browser, name, options, run) {
       await checkScreen(f, 'tablet light flagged cartons');
       await snap(f, 'tablette-clair-3-cartons-signales');
       await f.page.reload();
-      await f.page.getByRole('heading', { name: 'Cette réception : 2 cartons' }).waitFor();
-      await f.page.getByText('Carton n° 4 enregistré dans EXP-TEST-001.').waitFor();
+      await f.page.getByRole('heading', { name: toValidate(2), exact: true }).waitFor();
+      await f.page.locator('.rf-saved').getByText('Carton n° 4 enregistré dans EXP-TEST-001.').waitFor();
       await f.page.getByText('COLISSIMO-778', { exact: true }).waitFor();
       await rowOf(reminder, 'Carton 4').waitFor();
     });
@@ -831,18 +862,21 @@ async function scenario(browser, name, options, run) {
       });
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}`);
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await fillCarton(f.page, { tracking: 'DHL-1234567890', vendor: 'Cdiscount', measures: ['60', '40', '40', '8,5'] });
       await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
       const check = f.page.getByRole('button', { name: 'Vérifier l’enregistrement' });
       await check.waitFor();
       assert.equal(await f.page.getByLabel(/^Numéro de suivi/).isDisabled(), true, 'the carton cannot change while its save is checked');
+      // Nothing is validated while the carton is to check.
+      await f.page.getByText('Vérifiez d’abord l’enregistrement du carton ci-dessus', { exact: false }).waitFor();
+      assert.equal(await f.page.getByRole('button', { name: /^Valider / }).count(), 0);
       await checkScreen(f, 'tablet dark uncertain save');
       await snap(f, 'tablette-sombre-2-enregistrement-a-verifier');
       await f.page.reload();
       await check.waitFor();
       await check.click();
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
       assert.equal(sent.length, 2, 'the lost save, then its check');
       assert.deepEqual(sent[1], sent[0], 'the very same request is replayed');
       assert.match(sent[0].p_request_id, /^[0-9a-f-]{36}$/);
@@ -870,7 +904,7 @@ async function scenario(browser, name, options, run) {
       });
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${H}`);
-      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await fillCarton(f.page, { casier: 'D-04', tracking: 'UPS-1Z999', measures: ['35', '25', '12', '1,8'] });
       await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
       const check = f.page.getByRole('button', { name: 'Vérifier l’enregistrement' });
@@ -878,7 +912,7 @@ async function scenario(browser, name, options, run) {
       await snap(f, 'telephone-clair-2-creation-a-verifier');
       down = false;
       await check.click();
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
       assert.equal(inserts, 1, 'the check finds the dossier: no second insert');
       assert.equal(f.tables.colis.filter(row => row.client_id === H).length, 1, 'one brouillon');
     });
@@ -900,7 +934,7 @@ async function scenario(browser, name, options, run) {
       });
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${H}`);
-      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await fillCarton(f.page, { casier: 'D-05', tracking: 'UPS-1Z777', vendor: 'Fnac', measures: ['35', '25', '12', '1,8'] });
       await f.page.getByRole('button', { name: 'Ajouter ce carton', exact: true }).click();
       const check = f.page.getByRole('button', { name: 'Vérifier l’enregistrement' });
@@ -911,17 +945,17 @@ async function scenario(browser, name, options, run) {
       down = false;
       await check.click();
       // The carton is recorded: the brouillon is opened, never « non enregistré ».
-      await f.page.getByRole('heading', { level: 2, name: 'Cette réception : 2 cartons' }).waitFor();
-      await f.page.getByText(`Carton n° 1 enregistré dans ${created.ref} (nouveau brouillon).`).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: toValidate(2), exact: true }).waitFor();
+      await f.page.locator('.rf-saved').getByText(`Carton n° 1 enregistré dans ${created.ref} (nouveau brouillon).`).waitFor();
       await f.page.getByText('Ce brouillon a été complété depuis par un collègue : il reste ouvert, vos prochains cartons s’y ajoutent.').waitFor();
       assert.equal(await f.page.getByText(/pas (été )?enregistré/).count(), 0, 'a recorded carton is never said not recorded');
       assert.equal(f.tables.colis.filter(row => row.client_id === H).length, 1, 'one brouillon');
       await checkScreen(f, 'phone light recorded in a brouillon changed meanwhile');
-      await snap(f, 'telephone-clair-3-brouillon-complete-entre-temps');
-      // The next carton joins that brouillon.
-      await f.page.getByRole('button', { name: 'Ajouter un autre carton pour Jean' }).click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le carton' }).waitFor();
+      await snap(f, 'telephone-clair-2-brouillon-complete-entre-temps');
+      // The next carton joins that brouillon, on the same screen.
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       await f.page.getByText('Brouillon en cours : 2 cartons · Casier D-05').waitFor();
+      assert.equal(await f.page.getByLabel(/^Casier/).count(), 0);
     });
 
     await scenario(browser, 'creation-client-reponse-perdue-verifier-enregistrement', { layout: PHONE, expectedConsole: /Failed to load resource|ERR_FAILED/ }, async f => {
@@ -968,7 +1002,7 @@ async function scenario(browser, name, options, run) {
       assert.equal(await f.page.evaluate(() => document.activeElement?.textContent), 'Vérifier l’enregistrement', 'the check takes the focus');
       down = false;
       await verify.click();
-      await f.page.getByRole('heading', { level: 2, name: 'Le premier carton' }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: 'Ajouter un carton' }).waitFor();
       assert.equal(posts.length, 2, 'the lost creation, then its check');
       const { ref: _first, ...firstPost } = posts[0];
       const { ref: _second, ...secondPost } = posts[1];
@@ -991,16 +1025,21 @@ async function scenario(browser, name, options, run) {
       });
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
-      assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-step-title', 'the step title takes the focus');
-      // The carton recorded earlier: its dossier, its state and when it arrived, in the table of the reception.
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
+      assert.equal(await f.page.evaluate(() => document.activeElement?.id), 'rf-validation-title', 'the list to validate takes the focus');
+      // Opened to validate: the form waits behind one button.
+      assert.equal(await f.page.getByLabel(/^Numéro de suivi/).count(), 0, 'the form is closed');
+      await f.page.getByRole('button', { name: 'Ajouter un carton pour Camille', exact: true }).waitFor();
+      // The carton recorded earlier: its vendor and number, its measures and when it arrived.
       const earlier = rowOf(f.page.getByRole('table', { name: /^Cartons à valider/ }), 'Carton 3');
-      assert.match(await earlier.innerText(), /TBA30219911[\s\S]*EXP-TEST-001\s+pas encore validé\s+(Aujourd’hui|Hier)\s+\d{1,2}\s*h\s*\d{2}/);
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      assert.match(await earlier.innerText(), /Amazon\s+TBA30219911\s+30\s×\s25\s×\s15\scm\s+1,1\skg\s+(Aujourd’hui|Hier)\s+\d{1,2}\s*h\s*\d{2}/);
+      await checkScreen(f, 'tablet light opened to validate');
+      await snap(f, 'tablette-clair-2-ouvert-pour-valider');
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       const check = f.page.getByRole('button', { name: 'Vérifier la validation' });
       await check.waitFor();
-      assert.equal(await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).count(), 0, 'no second validation while the first is unknown');
-      await snap(f, 'tablette-clair-3-validation-a-verifier');
+      assert.equal(await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille' }).count(), 0, 'no second validation while the first is unknown');
+      await snap(f, 'tablette-clair-2-validation-a-verifier');
       await f.page.reload();
       await check.click();
       await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
@@ -1016,14 +1055,14 @@ async function scenario(browser, name, options, run) {
       earlierPendingCarton(f);
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
-      await f.page.getByText(/^En validant, l’e-mail pour Camille/).waitFor();
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
+      await f.page.getByText(/^L’e-mail pour Camille sera préparé/).waitFor();
       // The client links Telegram after the screen read its contact.
       f.tables.clients[0].telegram_chat_id = 'chat-camille';
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByText(/Le contact du client a changé : l’avis partira par Telegram\. La liste et le contact de Camille sont actualisés/).waitFor();
-      await f.page.getByText('En validant, Camille reçoit un seul message Telegram pour 1 colis.').waitFor();
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await f.page.getByText('Camille recevra un seul message Telegram pour 1 colis.').waitFor();
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
       const validations = requestsTo(f, '/rpc/validate_reception');
       assert.equal(validations.length, 2);
@@ -1031,12 +1070,36 @@ async function scenario(browser, name, options, run) {
       assert.equal(validations[1].input.p_canal, 'telegram');
     });
 
+    // The user's screenshot of 2026-10-29: « Could not find the function public.list_pending_receptions(p_client_id) in
+    // the schema cache ». A technical answer is never shown: a plain sentence and « Réessayer ».
+    await scenario(browser, 'erreur-technique-message-lisible', { layout: TABLET, expectedConsole: /Failed to load resource/ }, async f => {
+      fixtures(f);
+      earlierPendingCarton(f);
+      let broken = true;
+      await f.context.route('**/rest/v1/rpc/list_pending_receptions', route => broken
+        ? route.fulfill({ status: 404, contentType: 'application/json', body: JSON.stringify({ code: 'PGRST202', message: 'Could not find the function public.list_pending_receptions(p_client_id) in the schema cache', details: null, hint: null }) })
+        : route.fallback());
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
+      const alert = f.page.getByRole('alert').filter({ hasText: 'La liste des cartons à valider n’a pas pu être lue.' });
+      await alert.waitFor();
+      assert.equal(await f.page.getByText(/schema cache|Could not find/).count(), 0, 'a technical answer is never shown');
+      assert.equal(await f.page.getByRole('button', { name: /^Valider / }).count(), 0, 'nothing to validate without the list');
+      await checkScreen(f, 'tablet light list unreadable');
+      await snap(f, 'tablette-clair-2-liste-illisible');
+      broken = false;
+      await alert.getByRole('button', { name: 'Réessayer' }).click();
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).waitFor();
+      assert.equal(await f.page.getByRole('alert').filter({ hasText: 'n’a pas pu être lue' }).count(), 0);
+    });
+
     await scenario(browser, 'validation-concurrente-premier-carton-change', { layout: TABLET, expectedConsole: /Failed to load resource/ }, async f => {
       const state = fixtures(f, { telegram: true });
       earlierPendingCarton(f);
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
-      await f.page.getByRole('heading', { name: 'Cette réception : 1 carton' }).waitFor();
+      await f.page.getByRole('heading', { name: toValidate(1), exact: true }).waitFor();
       await f.page.getByText('TBA30219911', { exact: true }).waitFor();
       // Meanwhile a colleague validates carton n° 3, and carton n° 4 arrives.
       const [colleague] = validateReception(f.tables, state, { id: 'collegue' }, { p_client_id: ids.C, p_items: [{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }], p_notify: false, p_request_id: crypto.randomUUID() });
@@ -1044,7 +1107,7 @@ async function scenario(browser, name, options, run) {
       const parcel = f.tables.colis.find(row => row.id === ids.P);
       Object.assign(parcel, { nb_colis: 4, trackings: [...parcel.trackings, 'DPD-0004'], trackings_detail: [...parcel.trackings_detail, { number: 'DPD-0004', fournisseur: 'Decathlon' }],
         dims_par_colis: [...parcel.dims_par_colis, { dimL: 50, dimW: 40, dimH: 30, poids: 4 }], reception_dates: [...parcel.reception_dates, { receivedAt: ago(5), source: 'server' }] });
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       // The first carton is no longer the one shown (40001): the list is read again, the refusal said once.
       const failure = f.page.getByRole('alert').filter({ hasText: 'La réception n’est pas validée' });
       await failure.getByText('Des cartons de ce dossier ont été validés entre-temps. La liste et le contact de Camille sont actualisés : vérifiez, puis validez à nouveau.').waitFor();
@@ -1052,8 +1115,8 @@ async function scenario(browser, name, options, run) {
       await f.page.getByText('DPD-0004', { exact: true }).waitFor();
       assert.equal(await f.page.getByText('TBA30219911', { exact: true }).count(), 0, 'the carton validated meanwhile is gone');
       await checkScreen(f, 'tablet light validated meanwhile');
-      await snap(f, 'tablette-clair-3-valide-entre-temps');
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+      await snap(f, 'tablette-clair-2-valide-entre-temps');
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
       const validations = requestsTo(f, '/rpc/validate_reception');
       assert.deepEqual(validations.map(request => request.input.p_items), [[{ colisId: ids.P, fromCarton: 3, throughCarton: 3 }], [{ colisId: ids.P, fromCarton: 4, throughCarton: 4 }]]);
@@ -1078,17 +1141,17 @@ async function scenario(browser, name, options, run) {
       f.tables.factures.push({ id: crypto.randomUUID(), colis_id: first, vendeur: 'Amazon', montant: 80, valide: true, fichier_url: `${first}/facture.pdf`, fichier_nom: 'facture.pdf' });
       await f.login();
       await f.page.goto(`${base}/recevoir?client=${E}&valider=1`);
-      const heading = f.page.getByRole('heading', { level: 2, name: /^Cette réception : \d+ cartons$/ });
+      const heading = f.page.getByRole('heading', { level: 2, name: /^À valider : \d+ cartons$/ });
       await heading.waitFor();
       const shown = Number((await heading.innerText()).match(/(\d+) cartons/)[1]);
       assert.ok(shown > 40 && shown < 90, `the notice holds part of the 90 cartons (${shown})`);
       await f.page.getByText(`Encore ${90 - shown} cartons à valider ensuite : un avis d’arrivée ne peut pas en annoncer davantage en un seul message.`).waitFor();
       await checkScreen(f, 'tablet big batch');
-      await snap(f, 'tablette-clair-3-gros-lot');
+      await snap(f, 'tablette-clair-2-gros-lot');
       await f.page.evaluate(() => document.querySelector('main.staff-main')?.scrollTo({ top: 1e6 }));
       await settle(f.page);
-      await f.page.screenshot({ path: path.join(out, 'tablette-clair-3-gros-lot-bas.png') });
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Marie' }).click();
+      await f.page.screenshot({ path: path.join(out, 'tablette-clair-2-gros-lot-bas.png') });
+      await f.page.getByRole('button', { name: `Valider ${shown} cartons et prévenir Marie`, exact: true }).click();
       await f.page.getByRole('heading', { level: 2, name: `Réception validée : ${shown} colis pour Marie Grondin` }).waitFor();
       const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
       // The brouillon still requesting its invoice first, then the other one, cut where the text is full.
@@ -1105,11 +1168,11 @@ async function scenario(browser, name, options, run) {
       // The rest: a next validation, with its own notice.
       await f.page.getByText(`Encore ${90 - shown} cartons de Marie à valider`).waitFor();
       await checkScreen(f, 'tablet big batch validated');
-      await snap(f, 'tablette-clair-4-gros-lot-reste');
+      await snap(f, 'tablette-clair-3-gros-lot-reste');
       await f.page.getByRole('button', { name: 'Valider les cartons restants' }).click();
-      await f.page.getByRole('heading', { level: 2, name: `Cette réception : ${90 - shown} cartons` }).waitFor();
+      await f.page.getByRole('heading', { level: 2, name: toValidate(90 - shown), exact: true }).waitFor();
       assert.equal(await f.page.getByText(/^Encore \d+ cartons? à valider ensuite/).count(), 0, 'the rest holds in one notice');
-      await f.page.getByRole('button', { name: 'Valider la réception et prévenir Marie' }).click();
+      await f.page.getByRole('button', { name: `Valider ${90 - shown} cartons et prévenir Marie`, exact: true }).click();
       await f.page.getByRole('heading', { level: 2, name: `Réception validée : ${90 - shown} colis ajoutés au brouillon de Marie Grondin` }).waitFor();
       assert.deepEqual(requestsTo(f, '/rpc/validate_reception')[1].input.p_items, [{ colisId: first, fromCarton: shown - 39, throughCarton: 50 }]);
       assert.equal(state.validations.length, 2);
@@ -1210,8 +1273,8 @@ async function scenario(browser, name, options, run) {
       await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
       await f.page.getByText('Votre accès ne permet pas de prévenir Camille par Telegram : validez sans prévenir, ou demandez à un collègue autorisé de valider la réception.').waitFor();
       assert.equal(await f.page.getByRole('button', { name: /prévenir Camille/ }).count(), 0);
-      await checkScreen(f, 'phone light step 3 without telegram permission');
-      await f.page.getByRole('button', { name: 'Valider sans prévenir', exact: true }).click();
+      await checkScreen(f, 'phone light step 2 without telegram permission');
+      await f.page.getByRole('button', { name: 'Valider 1 carton sans prévenir', exact: true }).click();
       await f.page.getByRole('dialog', { name: 'Valider sans prévenir Camille ?' }).getByRole('button', { name: 'Valider sans prévenir' }).click();
       await f.page.getByText('Réception validée sans avis : le client n’est pas prévenu').waitFor();
       assert.equal(requestsTo(f, '/rpc/validate_reception')[0].input.p_notify, false);
@@ -1245,7 +1308,7 @@ async function scenario(browser, name, options, run) {
           found = await checkScreen(f, `${tag} validation`);
           assert.deepEqual(found.map(table => [table.name, table.rows]), [['Cartons à valider pour Exemple Camille', 1], ['Cartons signalés à la réception', 1]]);
           await scrollTables(f, `${tag} validation`);
-          await snap(f, `tableaux-${tag}-3-validation`);
+          await snap(f, `tableaux-${tag}-2-a-valider`);
 
           await f.page.goto(`${base}/avis`);
           await f.page.getByRole('table', { name: 'Avis d’arrivée récents' }).waitFor();
@@ -1269,21 +1332,26 @@ async function scenario(browser, name, options, run) {
         await checkScreen(f, `${tag} step 1`);
         await snap(f, `${tag}-1-client`);
         await chooseClient(f.page, 'Exemple', 'Exemple Camille');
-        await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).check();
         await checkScreen(f, `${tag} step 2`);
         await snap(f, `${tag}-2-carton`);
+        // Both problems open: the photo of the damaged carton and the forbidden products.
+        await damagedToggle(f.page).click();
+        await f.page.getByRole('button', { name: /^Produit interdit/ }).click();
+        await checkScreen(f, `${tag} step 2 problems`);
+        await snap(f, `${tag}-2-carton-probleme`);
         await fillCarton(f.page, { tracking: 'LP00112233', vendor: 'Temu', measures: ['20', '15', '10', '0,8'] });
-        await f.page.getByRole('checkbox', { name: /Carton abîmé ou ouvert/ }).uncheck();
-        await addCarton(f.page);
-        await checkScreen(f, `${tag} step 3`);
-        await snap(f, `${tag}-3-validation`);
+        await damagedToggle(f.page).click();
+        await f.page.getByRole('button', { name: /^Produit interdit/ }).click();
+        await addCarton(f.page, 1);
+        await checkScreen(f, `${tag} step 2 to validate`);
+        await snap(f, `${tag}-2-a-valider`);
         await f.page.getByText('Voir le message').click();
         await f.page.locator('pre.rf-message').waitFor();
         assert.match(await f.page.locator('pre.rf-message').innerText(), /^Bonjour Camille/);
-        await f.page.getByRole('button', { name: 'Valider la réception et prévenir Camille' }).click();
+        await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
         await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
-        await checkScreen(f, `${tag} step 4`);
-        await snap(f, `${tag}-4-rangement`);
+        await checkScreen(f, `${tag} step 3`);
+        await snap(f, `${tag}-3-rangement`);
       });
     }
   } finally {

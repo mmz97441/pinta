@@ -188,15 +188,16 @@ a.colis-alert:hover { border-color: var(--attention-text); }
 .colis-table-wrap { overflow: hidden; border: 1px solid var(--colis-line); border-radius: 16px; background: var(--colis-surface); }
 /* Separate borders: a cell kept in place (sticky) keeps its own borders. */
 .colis-table { width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
-/* The columns, as a share of the table on a tablet (fixed widths on a phone, below). */
-.colis-table[data-finances='true'] .colis-col-client { width: 19%; }
-.colis-table[data-finances='true'] .colis-col-colis { width: 16.5%; }
-.colis-table[data-finances='true'] .colis-col-stage { width: 24.5%; }
+/* The columns, as a share of the table; under the table's useful width (below) it scrolls in its frame. The column
+   « Colis » holds a line of dimensions (« 120 × 80 × 60 cm ») whole from a tablet's width on. */
+.colis-table[data-finances='true'] .colis-col-client { width: 18%; }
+.colis-table[data-finances='true'] .colis-col-colis { width: 19.5%; }
+.colis-table[data-finances='true'] .colis-col-stage { width: 22.5%; }
 .colis-table[data-finances='true'] .colis-col-total { width: 13%; }
 .colis-table[data-finances='true'] .colis-col-action { width: 27%; }
-.colis-table[data-finances='false'] .colis-col-client { width: 23%; }
-.colis-table[data-finances='false'] .colis-col-colis { width: 19%; }
-.colis-table[data-finances='false'] .colis-col-stage { width: 30%; }
+.colis-table[data-finances='false'] .colis-col-client { width: 22%; }
+.colis-table[data-finances='false'] .colis-col-colis { width: 22%; }
+.colis-table[data-finances='false'] .colis-col-stage { width: 28%; }
 .colis-table[data-finances='false'] .colis-col-action { width: 28%; }
 .colis-table thead th {
   padding: 8px 10px; background: var(--colis-head-bg); color: var(--colis-muted); font-size: 15px; font-weight: 700;
@@ -214,6 +215,17 @@ a.colis-alert:hover { border-color: var(--attention-text); }
 .colis-amount { display: block; color: var(--colis-name); font-size: 18px; font-weight: 800; white-space: nowrap; }
 .colis-table .colis-amount { font-size: 17px; }
 .colis-strong { font-size: 15px; font-weight: 600; color: var(--colis-text); }
+/* The dimensions under the cartons' weight and volume: one carton (or one parcel to ship) per line. */
+.colis-dims { display: block; margin-top: 3px; }
+.colis-dim-line { display: block; font-size: 15px; font-weight: 400; line-height: 1.35; color: var(--colis-text); }
+.colis-dim-line[data-missing='true'] { color: var(--colis-muted); }
+.colis-dims-caption { display: block; font-size: 15px; line-height: 1.35; color: var(--colis-muted); }
+/* A line found by a number: which one (« Suivi … · carton 2 », « Départ ENV-… »). */
+.colis-match {
+  display: inline-flex; align-items: flex-start; gap: 4px; max-width: 100%; margin-top: 4px; padding: 2px 8px; border-radius: 8px;
+  background: var(--colis-group-bg); color: var(--colis-group-text); font-size: 15px; font-weight: 700; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere;
+}
+.colis-match svg { margin-top: 2px; }
 .colis-group-row th {
   padding: 8px 10px 8px 14px; border-top: 1px solid var(--colis-group-line); background: var(--colis-group-bg); color: var(--colis-group-text);
   text-align: left; font-weight: 400;
@@ -344,3 +356,7 @@ html.dark .fiche-saving { background: #153d2c; color: #b9e8ca; }
   .fiche-grid[data-columns='two'] { grid-template-columns: minmax(0, 1fr) 380px; }
 }
 .fiche-column { display: grid; gap: 20px; min-width: 0; }
+
+/* The containing block of what is positioned inside (captions and announcements, .sr-only): kept within the scrolling
+   <main>, they never make the whole page taller, which a focus would then scroll (the menu sliding up). */
+.colis-page:not(.colis-sheet-layer) { position: relative; }

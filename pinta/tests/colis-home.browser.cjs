@@ -22,8 +22,8 @@ const ago = (days, hours = 0) => new Date(NOW - days * 86400000 - hours * 360000
 const PARIS_DAY = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
 const parisDay = offset => PARIS_DAY.format(new Date(NOW + offset * 86400000));
 const uuid = n => `c0115000-0000-4000-8000-${String(n).padStart(12, '0')}`;
-const CLIENT = { abdallah: uuid(101), boyer: uuid(102), grondin: uuid(103), hoarau: uuid(104), payet: uuid(105), riviere: uuid(106), techer: uuid(107), lebon: uuid(108), fontaine: uuid(109), maillot: uuid(110), dupont: uuid(111) };
-const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211), techer2: uuid(212), dupont: uuid(213), request: uuid(214), lines: uuid(215) };
+const CLIENT = { abdallah: uuid(101), boyer: uuid(102), grondin: uuid(103), hoarau: uuid(104), payet: uuid(105), riviere: uuid(106), techer: uuid(107), lebon: uuid(108), fontaine: uuid(109), maillot: uuid(110), dupont: uuid(111), ailleurs: uuid(112) };
+const D = { abdallah: uuid(201), boyer: uuid(202), grondin: uuid(203), hoarau: uuid(204), payet: uuid(205), riviere: uuid(206), techer: uuid(207), lebon: uuid(208), fontaine: uuid(209), maillot: uuid(210), archive: uuid(211), techer2: uuid(212), dupont: uuid(213), request: uuid(214), lines: uuid(215), ailleurs: uuid(216) };
 const E = { past: uuid(300), soon: uuid(301), mayotte: uuid(302), later: uuid(303) };
 const NOTICE = { riviere: uuid(401), techer: uuid(402) };
 const MESSAGE = { riviere: uuid(501), techer: uuid(502) };
@@ -235,6 +235,7 @@ registerRequestMock(({ url, method, input, tables }) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const tabs = f => f.page.getByRole('navigation', { name: 'Étapes des colis', exact: true });
+const SEARCH_LABEL = 'Chercher par nom, numéro de colis, numéro de suivi ou numéro d’expédition';
 const rowOf = (f, id) => f.page.locator(`[data-colis-row="${id}"]`);
 const namesInOrder = f => f.page.locator('[data-colis-name]').evaluateAll(links => links.map(link => link.textContent.trim()));
 /** Waits until the list shows these clients, in this order (a sort is applied on the next render). */
@@ -280,7 +281,13 @@ async function readability(page, rootSelector = 'main') {
       const rect = element.getBoundingClientRect();
       if (rect.height < 44 || rect.width < 44) tiny.push(`${Math.round(rect.width)}×${Math.round(rect.height)} « ${(element.getAttribute('aria-label') || element.textContent || element.tagName).trim().slice(0, 50)} »`);
     }
-    return { small, tiny, overflow: document.documentElement.scrollWidth > window.innerWidth + 1 || root.scrollWidth > root.clientWidth + 1, h1: document.querySelectorAll('h1').length };
+    return { small, tiny, overflow: document.documentElement.scrollWidth > window.innerWidth + 1 || root.scrollWidth > root.clientWidth + 1, h1: document.querySelectorAll('h1').length,
+      // Only <main> scrolls: nothing positioned inside it (a hidden caption) makes the whole page taller.
+      pageTaller: document.documentElement.scrollHeight > window.innerHeight + 1,
+      // What makes it taller: positioned outside the scrolling <main>, below the window.
+      escaping: document.documentElement.scrollHeight <= window.innerHeight + 1 ? [] : [...document.querySelectorAll('body *')]
+        .filter(element => getComputedStyle(element).position === 'absolute' && (!element.offsetParent || !document.querySelector('main').contains(element.offsetParent)) && element.getBoundingClientRect().bottom > window.innerHeight + 1)
+        .slice(0, 6).map(element => `${element.tagName}.${String(element.className).slice(0, 50)} « ${element.textContent.trim().slice(0, 30)} » ${Math.round(element.getBoundingClientRect().bottom)}`) };
   }, rootSelector);
 }
 async function assertReadable(f, label, root = 'main') {
@@ -288,6 +295,7 @@ async function assertReadable(f, label, root = 'main') {
   assert.deepEqual(measure.small, [], `${label}: text of 15 px at least`);
   assert.deepEqual(measure.tiny, [], `${label}: targets of 44 px at least`);
   assert.equal(measure.overflow, false, `${label}: no horizontal scroll`);
+  assert.equal(measure.pageTaller, false, `${label}: only the main area scrolls (${measure.escaping.join(' ; ')})`);
   assert.equal(measure.h1, 1, `${label}: one h1`);
 }
 async function assertAccessible(f, label, root = 'main') {
@@ -446,7 +454,7 @@ async function main() {
     await scenario('sorts-and-departure-groups', async f => {
       await openHome(f);
       const sorts = f.page.getByRole('group', { name: 'Classer', exact: true });
-      assert.deepEqual(await sorts.getByRole('button').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par réception', 'Par montant']);
+      assert.deepEqual(await sorts.getByRole('button').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
       await sorts.getByRole('button', { name: 'Par date d’envoi', exact: true }).click();
       await f.page.waitForURL(url => url.searchParams.get('classer') === 'depart');
       await sorts.locator('button[aria-pressed="true"]', { hasText: 'Par date d’envoi' }).waitFor();
@@ -473,9 +481,72 @@ async function main() {
       noSend(f);
     });
 
+    await scenario('sort-by-destination', async f => {
+      // Five sorts beside the search, never outside their group nor the page, with the sidebar of a computer too.
+      for (const [width, height] of [[1440, 900], [1024, 768], [820, 1180], [768, 1024]]) {
+        await f.page.setViewportSize({ width, height });
+        await openHome(f);
+        const sorts = f.page.getByRole('group', { name: 'Classer', exact: true });
+        assert.deepEqual(await sorts.getByRole('button').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant'], `${width}`);
+        const fit = await sorts.evaluate(group => {
+          const box = group.getBoundingClientRect(), main = document.querySelector('main').getBoundingClientRect();
+          return {
+            buttons: [...group.querySelectorAll('button')].every(button => {
+              const rect = button.getBoundingClientRect();
+              return rect.left >= box.left - 0.5 && rect.right <= box.right + 0.5 && rect.height >= 44 && button.scrollWidth <= button.clientWidth + 1;
+            }),
+            group: box.left >= main.left - 0.5 && box.right <= main.right + 0.5 && group.scrollWidth <= group.clientWidth + 1,
+            page: document.documentElement.scrollWidth <= window.innerWidth + 1,
+          };
+        });
+        assert.deepEqual(fit, { buttons: true, group: true, page: true }, `${width}`);
+        if (width >= 1024) assert.equal(await f.page.locator('aside.staff-sidebar, .staff-sidebar').first().isVisible(), true, `${width}: with the sidebar`);
+      }
+      // One group per destination, in the order Réunion, Mayotte, then the destinations to check; by name inside.
+      await f.page.setViewportSize({ width: 1440, height: 900 });
+      await openHome(f);
+      const sorts = f.page.getByRole('group', { name: 'Classer', exact: true });
+      await sorts.getByRole('button', { name: 'Par destination', exact: true }).click();
+      await f.page.waitForURL(url => url.searchParams.get('classer') === 'destination');
+      await sorts.locator('button[aria-pressed="true"]', { hasText: 'Par destination' }).waitFor();
+      await f.page.getByRole('table', { name: 'Brouillon, classé par destination', exact: true }).waitFor();
+      await f.page.locator('.colis-group-row').nth(2).waitFor();
+      const groups = await f.page.locator('.colis-group-row').evaluateAll(rows => rows.map(row => row.innerText.replace(/\s+/g, ' ').trim()));
+      assert.equal(groups.length, 3, groups.join('\n'));
+      assert.match(groups[0], /^Réunion 6 clients · 18 cartons · [\d,]+ kg · [\d,]+ m³ · 229,50 € \(2 prix connus sur 6\)$/);
+      assert.match(groups[1], /^Mayotte 1 client · 1 carton · 2,1 kg · 0,012 m³ · prix à calculer$/);
+      assert.match(groups[2], /^Destination à vérifier 1 client · 1 carton · 1,5 kg · 0,006 m³ · prix à calculer$/);
+      assert.equal(await f.page.locator('.colis-group-row[data-none="true"]').count(), 1, 'The destinations to check in the colour of what is to check.');
+      await waitForOrder(f, ['Boyer Sandrine', 'Grondin Jean', 'Hoarau Jean-Marc', 'Payet Flavie', 'Rivière Marie-Claude', 'Técher Johnny', 'Abdallah Mohamed', 'Leroy Nina']);
+      await assertReadable(f, 'by destination');
+      await assertAccessible(f, 'by destination');
+      await shot(f, 'colis-bureau-par-destination');
+      // The address keeps it; the other tabs and the search keep it too.
+      await f.page.reload();
+      await sorts.locator('button[aria-pressed="true"]', { hasText: 'Par destination' }).waitFor();
+      await tabs(f).getByRole('link', { name: /^À payer/ }).click();
+      await f.page.waitForURL(url => url.searchParams.get('onglet') === 'a_payer' && url.searchParams.get('classer') === 'destination');
+      await f.page.locator('.colis-group-row', { hasText: 'Réunion' }).waitFor();
+      // A phone: the menu offers it, the table groups the same way, the page never scrolls sideways.
+      await f.page.setViewportSize({ width: 390, height: 844 });
+      await openHome(f, '?classer=destination');
+      const menu = f.page.getByLabel('Classer', { exact: true });
+      assert.deepEqual(await menu.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
+      assert.equal(await menu.inputValue(), 'destination');
+      assert.equal(await f.page.locator('.colis-group-row').count(), 3);
+      assert.equal((await tableFrame(f, 'colis-liste')).pageOverflow, false);
+      await assertReadable(f, 'by destination on a phone');
+      await shot(f, 'colis-telephone-par-destination');
+      noSend(f);
+    }, { prepare: f => {
+      // A client outside the four destinations (a postcode of mainland France): « Destination à vérifier ».
+      f.tables.clients.push(client(CLIENT.ailleurs, 'Leroy', 'Nina', '75011', 'Paris'));
+      f.tables.colis.push(dossier(D.ailleurs, CLIENT.ailleurs, 'EXP-TEST-116', 'mesure', [carton('LER-1', 'Fnac', 30, 20, 10, 1.5)], { casier: 'H-03', reception_dates: received([1], 1) }));
+    } });
+
     await scenario('search-by-tracking-number-and-scanner', async f => {
       await openHome(f);
-      const search = f.page.getByLabel('Chercher un client, une référence, un casier ou un numéro de suivi', { exact: true });
+      const search = f.page.getByLabel(SEARCH_LABEL, { exact: true });
       // A tracking number typed without its spaces finds its dossier; the tabs count what is found.
       await search.fill('6A12345678901');
       await f.page.waitForFunction(() => document.querySelectorAll('[data-colis-row]').length === 1);
@@ -513,6 +584,59 @@ async function main() {
       await shot(f, 'colis-tablette-recherche', false);
       noSend(f);
     });
+
+    await scenario('search-by-expedition-and-dimensions', async f => {
+      await openHome(f);
+      const search = f.page.getByLabel(SEARCH_LABEL, { exact: true });
+      assert.equal(await search.getAttribute('placeholder'), 'Nom, n° de colis ou d’expédition');
+      // The reference of a departure: every dossier it carries, each line saying what it was found by.
+      await search.fill('ENV-TEST-01');
+      await f.page.waitForURL(url => url.searchParams.get('q') === 'ENV-TEST-01');
+      await waitForOrder(f, ['Grondin Jean', 'Payet Flavie', 'Rivière Marie-Claude']);
+      for (const key of ['grondin', 'payet', 'riviere']) assert.equal(await flat(f.page.locator(`[data-match="${D[key]}"]`)), 'Départ ENV-TEST-01', key);
+      // A carton's tracking number, part of it, typed without its dash: the carton is named.
+      await search.fill('shein4472');
+      await waitForOrder(f, ['Rivière Marie-Claude']);
+      assert.equal(await flat(f.page.locator(`[data-match="${D.riviere}"]`)), 'Suivi SHEIN-4472 · carton 2');
+      // A name: nothing more to say on the line.
+      await search.fill('Payet');
+      await waitForOrder(f, ['Payet Flavie']);
+      assert.equal(await f.page.locator('[data-match]').count(), 0);
+      // The carrier's number of a shipped expedition, scanned without its dash and space: found in « Parti », the only
+      // dossier opens with Enter, the way back keeps the tab.
+      await search.fill('23512345675');
+      const elsewhere = f.page.getByRole('region', { name: /^Aucun dossier de l’onglet Brouillon ne correspond/ });
+      await elsewhere.getByRole('link', { name: 'Voir 1 dossier dans Parti', exact: true }).click();
+      await f.page.waitForURL(url => url.searchParams.get('onglet') === 'parti');
+      await rowOf(f, D.maillot).waitFor();
+      assert.equal(await flat(f.page.locator(`[data-match="${D.maillot}"]`)), 'Expédition 235-1234 5675');
+      await assertReadable(f, 'search by expedition');
+      await assertAccessible(f, 'search by expedition');
+      await shot(f, 'colis-recherche-expedition', false);
+      await search.press('Enter');
+      await f.page.waitForURL(url => url.pathname === `/brouillon/${D.maillot}`);
+      assert.equal(new URL(f.page.url()).searchParams.get('returnTo'), '/?q=23512345675&onglet=parti');
+      // The dimensions, in the column « Colis » under the weight: one line per carton received, three at most, then
+      // the parcels to ship once prepared; whole lines, inside their cell, at every width.
+      for (const [width, height] of [[1440, 900], [1024, 768], [820, 1180], [390, 844]]) {
+        await f.page.setViewportSize({ width, height });
+        await openHome(f);
+        assert.match(await flat(rowOf(f, D.techer).locator('td').first()), /^2 cartons · casier C-09 3,7 kg · 0,030 m³ 40 × 30 × 20 cm 30 × 20 × 10 cm$/, `${width}`);
+        assert.match(await flat(rowOf(f, D.boyer).locator('td').first()), /^4 cartons · casier B-02 [\d,]+ kg · [\d,]+ m³ 30 × 30 × 30 cm 40 × 30 × 20 cm 35 × 25 × 25 cm \+ 1 autre$/, `${width}`);
+        assert.match(await flat(rowOf(f, D.riviere).locator('td').first()), /^5 cartons · casier C-03 [\d,]+ kg · [\d,]+ m³ Préparé : 50 × 40 × 30 cm 40 × 30 × 20 cm$/, `${width}`);
+        const lines = await f.page.locator('.colis-dim-line').evaluateAll(items => items.map(item => {
+          const cell = item.closest('td').getBoundingClientRect(), box = item.getBoundingClientRect();
+          return { text: item.textContent, inside: box.left >= cell.left - 0.5 && box.right <= cell.right + 0.5, oneLine: box.height < 30 };
+        }));
+        assert.ok(lines.length >= 9 && lines.every(line => line.inside && line.oneLine), `${width}: ${JSON.stringify(lines.filter(line => !line.inside || !line.oneLine))}`);
+        assert.equal((await tableFrame(f, 'colis-liste')).pageOverflow, false, `${width}`);
+        await assertReadable(f, `dimensions ${width}`);
+      }
+      await shot(f, 'colis-telephone-dimensions', false);
+      noSend(f);
+    }, { prepare: f => {
+      f.tables.envois.find(row => row.id === E.past).tracking_principal = '235-1234 5675';
+    } });
 
     await scenario('row-actions-open-their-page', async f => {
       await openHome(f, '?classer=nom');
@@ -719,10 +843,10 @@ async function main() {
         const boxes = await tabs(f).getByRole('link').evaluateAll(links => links.map(link => link.getBoundingClientRect()).map(rect => ({ top: Math.round(rect.top), height: rect.height })));
         assert.equal(new Set(boxes.map(item => item.top)).size, 2, 'Two lines of tabs.');
         const sort = f.page.getByLabel('Classer', { exact: true });
-        assert.deepEqual(await sort.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par réception', 'Par montant']);
+        assert.deepEqual(await sort.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
         const table = f.page.getByRole('table', { name: 'Brouillon, classé par nom', exact: true });
         assert.deepEqual((await table.locator('thead th').allInnerTexts()).map(text => text.trim().toLowerCase()), ['client', 'colis', 'où en est-on', 'total à payer', 'action']);
-        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou 1 carton · casier D-04 2,1 kg · 0,012 m³ Accord à demander Jamais demandé À calculer Demander l’accord$/);
+        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou 1 carton · casier D-04 2,1 kg · 0,012 m³ 30 × 20 × 20 cm Accord à demander Jamais demandé À calculer Demander l’accord$/);
         // The client's name opens the sheet.
         assert.equal(await rowOf(f, D.payet).getByRole('link', { name: 'Payet Flavie', exact: true }).getAttribute('href'), `/brouillon/${D.payet}?returnTo=%2F`);
         // The table scrolls in its frame; the page never does. Its right edge is shaded while columns hide there.
@@ -1067,7 +1191,7 @@ async function main() {
 
     await scenario('scanner-fills-the-search-without-a-focused-field', async f => {
       await openHome(f);
-      const search = f.page.getByLabel('Chercher un client, une référence, un casier ou un numéro de suivi', { exact: true });
+      const search = f.page.getByLabel(SEARCH_LABEL, { exact: true });
       // A scan while « Demander l’accord » has the focus: searched; the button is not pressed, no field takes the focus.
       const trigger = rowOf(f, D.abdallah).getByRole('button', { name: 'Demander l’accord', exact: true });
       await trigger.focus();
@@ -1231,7 +1355,7 @@ async function main() {
       await openHome(f, '?classer=montant');
       // No amount anywhere, no « Par montant », its address falls back to « Par nom ».
       assert.equal(await f.page.getByRole('columnheader', { name: 'Total à payer' }).count(), 0);
-      assert.deepEqual(await f.page.getByRole('group', { name: 'Classer', exact: true }).getByRole('button').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par réception']);
+      assert.deepEqual(await f.page.getByRole('group', { name: 'Classer', exact: true }).getByRole('button').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception']);
       assert.equal(await f.page.getByRole('group', { name: 'Classer', exact: true }).getByRole('button', { name: 'Par nom', exact: true }).getAttribute('aria-pressed'), 'true');
       assert.doesNotMatch(await flat(f.page.locator('main')), /€|À calculer/);
       // Actions that need a right: disabled, with the reason.

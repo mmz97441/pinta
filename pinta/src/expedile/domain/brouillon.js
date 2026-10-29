@@ -81,6 +81,7 @@ export function colisTabKey(value) {
 export const COLIS_SORTS = Object.freeze([
   Object.freeze({ key: 'nom', label: 'Par nom' }),
   Object.freeze({ key: 'depart', label: 'Par date d’envoi' }),
+  Object.freeze({ key: 'destination', label: 'Par destination' }),
   Object.freeze({ key: 'reception', label: 'Par réception' }),
   Object.freeze({ key: 'montant', label: 'Par montant', financial: true }),
 ]);
@@ -661,6 +662,41 @@ function trackingNumbers(dossier) {
   return [...new Set([...manifest.trackingsDetail.map(detail => text(detail.number)), ...manifest.trackings.map(text)].filter(Boolean))];
 }
 
+/** The parcels to ship once the preparation of the current cartons is recorded (hasCurrentPreparation): the saved
+ * packages, or the single legacy final box; null before. The dossier table and the Brouillon sheet read the same. */
+function preparedPackages(dossier) {
+  if (!hasCurrentPreparation(dossier)) return null;
+  return dossier.finalPackages ?? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }];
+}
+
+/** At most this many lines of dimensions in a row of « Colis »; the others are counted (« + 2 autres »). */
+export const DIMENSION_LINES_SHOWN = 3;
+
+/** The « Dimensions » of a row: the parcels to ship once prepared (`prepared`), otherwise the cartons received, one
+ * line each (« 40 × 30 × 20 cm », « À mesurer » for a carton without its three sides). `shown` the first lines,
+ * `moreLabel` the count of the others, `label` every line on one line. */
+function dimensionsOf(dossier, cartons) {
+  const packages = preparedPackages(dossier);
+  const lines = packages ? packages.map(formatDimensions) : cartons.map(carton => carton.dimensionsLabel);
+  const hidden = Math.max(0, lines.length - DIMENSION_LINES_SHOWN);
+  return { prepared: Boolean(packages), lines, shown: lines.slice(0, DIMENSION_LINES_SHOWN),
+    moreLabel: hidden ? `+ ${hidden} ${hidden > 1 ? 'autres' : 'autre'}` : null, label: lines.length ? lines.join(' · ') : MEASURE_MISSING_LABEL };
+}
+
+/** The numbers a row can be found by, each with what to say when it matched: the dossier's reference, each carton's
+ * tracking number, the departure's reference and the carrier's number of the expedition. */
+function searchCodesOf(dossier, cartons, departure) {
+  const codes = [];
+  if (text(dossier.ref)) codes.push({ value: text(dossier.ref), label: `Dossier ${text(dossier.ref)}` });
+  for (const carton of cartons) if (carton.tracking) codes.push({ value: carton.tracking, label: cartons.length > 1 ? `Suivi ${carton.tracking} · carton ${carton.number}` : `Suivi ${carton.tracking}` });
+  // A tracking number recorded without its carton (former dossiers): found all the same.
+  for (const tracking of trackingNumbers(dossier)) if (!codes.some(code => code.value === tracking)) codes.push({ value: tracking, label: `Suivi ${tracking}` });
+  const envoi = departure.envoi;
+  if (text(envoi?.ref)) codes.push({ value: text(envoi.ref), label: `Départ ${text(envoi.ref)}` });
+  if (text(envoi?.trackingPrincipal)) codes.push({ value: text(envoi.trackingPrincipal), label: `Expédition ${text(envoi.trackingPrincipal)}` });
+  return codes;
+}
+
 function departureOf(f) {
   const { dossier, client, envois, now } = f;
   const envoiId = dossier.envoi || dossier.envoiId || null;
@@ -706,7 +742,9 @@ function rowOf(f) {
   const known = clientDisplayName(client) || text(client?.raisonSociale) || null;
   const code = dossierDestinationCode(dossier, client || {});
   const lastReceivedAt = model.reception.lastReceivedAt;
-  const trackings = trackingNumbers(dossier);
+  const departure = departureOf(f);
+  const searchCodes = searchCodesOf(dossier, cartons, departure);
+  const codes = searchCodes.map(code => code.value);
   const casier = text(dossier.casier) || null;
   return {
     id: dossier.id, ref: dossier.ref || null, statut: dossier.statut, tab: f.tab,
@@ -717,20 +755,24 @@ function rowOf(f) {
     cartons: cartons.length, cartonsLabel: countLabel(cartons.length, 'carton', 'cartons'), pendingCartons: f.pending?.cartonCount || 0,
     casier, casierLabel: casier ? `Casier ${casier}` : 'Casier à renseigner',
     poids: measures.poids, poidsLabel: measures.poidsLabel, volume: measures.volume, volumeLabel: measures.volumeLabel,
+    dimensions: dimensionsOf(dossier, cartons),
     lastReceivedAt, lastReceivedLabel: dateLabel(lastReceivedAt) || 'Non renseigné',
     stage: stageNow, action: stageNow.action,
     total: totalOf(f),
-    departure: departureOf(f),
+    departure,
     ficheHref: dossier.id ? `/brouillon/${encodeURIComponent(dossier.id)}` : null,
-    searchText: [clientSearchText(client), known, dossier.ref, casier, ...trackings, ...trackings.map(compactCode).filter(code => !trackings.includes(code))].filter(Boolean).join(' '),
+    searchCodes,
+    searchText: [clientSearchText(client), known, casier, ...codes, ...codes.map(compactCode).filter(code => !codes.includes(code))].filter(Boolean).join(' '),
   };
 }
 
 /**
  * One row of « Colis »: `id, ref, statut, tab, clientId, clientName, clientKnown, clientType, clientTypeLabel,
  * destinationCode, destinationLabel, commune, cartons, cartonsLabel, pendingCartons, casier, casierLabel, poids,
- * poidsLabel, volume, volumeLabel, lastReceivedAt, lastReceivedLabel, stage, action, total, departure, ficheHref,
- * searchText`. `poids`/`volume`: the received cartons, null unless every carton is measured. `total` =
+ * poidsLabel, volume, volumeLabel, dimensions, lastReceivedAt, lastReceivedLabel, stage, action, total, departure,
+ * ficheHref, searchCodes, searchText`. `poids`/`volume`: the received cartons, null unless every carton is measured.
+ * `dimensions` = `{ prepared, lines, shown, moreLabel, label }`: the parcels to ship once prepared, otherwise the
+ * cartons received, one line each. `searchCodes`: the numbers the row is found by (colisSearchMatch). `total` =
  * `{ visible, amount, state, label }`: the saved and current quote (quotePrice), « À calculer » or its state
  * without one, never a false zero; nothing when canSeeDossierFinances is false. A paid dossier (« Prêt à partir »,
  * « Parti », or a payment recorded in full): `state` PAID_TOTAL_STATE (« paid »), `label` « Payé », `amount` the
@@ -741,8 +783,9 @@ export function colisRow(dossier, ctx = {}) {
   return rowOf(factsOf(dossier || {}, ctx || {}));
 }
 
-/** The rows matching a search: name, client details, dossier reference, casier and tracking numbers (with or
- * without their spaces), every word of the query; a scanned parcel label (« EXP-2YE537-1-2 ») finds its dossier. */
+/** The rows matching a search: name, client details, dossier reference, casier, the cartons' tracking numbers, the
+ * departure's reference and the expedition's carrier number (each with or without its spaces, dashes, dots or
+ * slashes), every word of the query; a scanned parcel label (« EXP-2YE537-1-2 ») finds its dossier. */
 export function filterColisRows(rows = [], q = '') {
   const list = (Array.isArray(rows) ? rows : []).filter(Boolean);
   const query = String(q ?? '').trim();
@@ -754,6 +797,27 @@ export function filterColisRows(rows = [], q = '') {
     || fuzzy(row.searchText, query) || (compact !== query && compact.length >= 4 && fuzzy(row.searchText, compact)));
 }
 
+/** A number is searched from its third character on: shorter, it would point at too many rows. */
+const MATCH_MIN_LENGTH = 3;
+
+/**
+ * What a row was found by when the search is a number: « Dossier EXP-… », « Suivi … · carton 2 », « Départ ENV-… »,
+ * « Expédition … », « Colis 1/2 · EXP-… » for a parcel label; null when the search is a name or matches no number
+ * of the row. The screen shows it under the client's name, so the team sees why the line is there.
+ */
+export function colisSearchMatch(row, q = '') {
+  const query = String(q ?? '').trim();
+  if (!row || !query) return null;
+  const code = parseParcelCode(query);
+  if (code.ok && code.ref.toUpperCase() === String(row.ref || '').toUpperCase()) {
+    return code.index !== null ? `Colis ${code.index}/${code.count} · ${row.ref}` : `Dossier ${row.ref}`;
+  }
+  const wanted = compactCode(query).toUpperCase();
+  if (wanted.length < MATCH_MIN_LENGTH) return null;
+  const found = (row.searchCodes || []).find(item => compactCode(item.value).toUpperCase().includes(wanted));
+  return found ? found.label : null;
+}
+
 const byName = (left, right) => Number(!left.row.clientKnown) - Number(!right.row.clientKnown)
   || naturalOrder.compare(left.row.clientName || '', right.row.clientName || '')
   || naturalOrder.compare(left.row.ref || '', right.row.ref || '') || left.index - right.index;
@@ -763,13 +827,15 @@ const descending = (a, b) => b - a;
 
 /**
  * The rows in the order of a sort (COLIS_SORTS), a new list: `nom` alphabetical (unknown client last); `depart`
- * the order of groupColisRowsByDeparture, by name inside a departure; `reception` the latest carton received
- * first; `montant` the highest price first. Rows without a date or a price come last; equal rows by name.
+ * the order of groupColisRowsByDeparture, by name inside a departure; `destination` the order of
+ * groupColisRowsByDestination, by name inside a destination; `reception` the latest carton received first;
+ * `montant` the highest price first. Rows without a date or a price come last; equal rows by name.
  */
 export function sortColisRows(rows = [], key = COLIS_DEFAULT_SORT, { now = Date.now() } = {}) {
   const indexed = (Array.isArray(rows) ? rows : []).filter(Boolean).map((row, index) => ({ row, index }));
   const named = [...indexed].sort(byName);
   if (key === 'depart') return groupColisRowsByDeparture(named.map(item => item.row), { now }).reduce((list, group) => list.concat(group.rows), []);
+  if (key === 'destination') return groupColisRowsByDestination(named.map(item => item.row)).reduce((list, group) => list.concat(group.rows), []);
   const valueOf = key === 'reception' ? row => instantOf(row.lastReceivedAt)
     : key === 'montant' ? row => row.total?.visible ? finiteAmount(row.total.amount) : null : null;
   if (!valueOf) return named.map(item => item.row);
@@ -830,6 +896,32 @@ export function groupColisRowsByDeparture(rows = [], { now = Date.now() } = {}) 
       destinationLabel: group.destinationLabel || null, ref: group.ref || null, closingLabel: none ? null : members[0]?.departure?.closingLabel || null,
       rows: members, totals: colisTotals(members) };
   });
+}
+
+/** The group of the rows whose destination is unknown (« Par destination »). */
+export const NO_DESTINATION_GROUP_KEY = 'destination:inconnue';
+export const UNKNOWN_DESTINATION_LABEL = 'Destination à vérifier';
+// Réunion, Mayotte, Guadeloupe, Martinique, then any other destination (object keys made of digits are listed in
+// numeric order, not in the order written: the order is said here).
+const DESTINATION_ORDER = ['974', '976', '971', '972'];
+
+/**
+ * « Par destination »: one group per destination of the rows (`destinationCode`: the client's postcode, the paid
+ * quote's destination once paid), in the order of DESTINATIONS (Réunion, Mayotte, Guadeloupe, Martinique), then
+ * « Destination à vérifier » for a destination unknown. Each group: `{ key, code, label, rows, totals }`
+ * (colisTotals), its rows by the client's name (« Par nom »).
+ */
+export function groupColisRowsByDestination(rows = []) {
+  const order = [...DESTINATION_ORDER, ...Object.keys(DESTINATIONS).filter(code => !DESTINATION_ORDER.includes(code))];
+  const groups = new Map();
+  for (const row of sortColisRows(rows, 'nom')) {
+    const code = Object.prototype.hasOwnProperty.call(DESTINATIONS, row.destinationCode) ? row.destinationCode : null;
+    const key = code ? `destination:${code}` : NO_DESTINATION_GROUP_KEY;
+    if (!groups.has(key)) groups.set(key, { key, code, label: code ? DESTINATIONS[code].label : UNKNOWN_DESTINATION_LABEL, rows: [] });
+    groups.get(key).rows.push(row);
+  }
+  const rank = group => group.code ? order.indexOf(group.code) : order.length;
+  return [...groups.values()].sort((left, right) => rank(left) - rank(right)).map(group => ({ ...group, totals: colisTotals(group.rows) }));
 }
 
 /** The address of a row's action when it opens a page: « Valider la réception » its reception; « Lire la
@@ -1088,13 +1180,13 @@ function fichePrice(f, missing) {
 /** « Après optimisation »: the parcels to ship once the preparation is current (hasCurrentPreparation), and the
  * volume gained against the received cartons. */
 function ficheOptimized(dossier, receivedVolume) {
-  if (!hasCurrentPreparation(dossier)) {
+  // The same parcels as the dossier table: the saved packages, or the single legacy final box.
+  const boxes = preparedPackages(dossier);
+  if (!boxes) {
     const outdated = dossier.preparationCompositionVersion != null && dossier.finalMeasurementsVersion != null && dossier.finalMeasurementsVersion !== dossier.preparationCompositionVersion;
     return { done: false, summary: outdated ? 'Mesures après optimisation à confirmer pour les cartons actuels' : 'Préparation à faire',
       count: 0, packages: [], poids: null, volume: null, poidsLabel: MEASURE_MISSING_LABEL, volumeLabel: MEASURE_MISSING_LABEL, volumeGain: null };
   }
-  // The same parcels as the dossier table: the saved packages, or the single legacy final box.
-  const boxes = dossier.finalPackages ?? [{ dimL: dossier.finL, dimW: dossier.finW, dimH: dossier.finH, poids: dossier.finP }];
   const packages = boxes.map((box, index) => {
     const volume = cartonVolumeM3(box);
     return { number: index + 1, dimL: positive(box.dimL), dimW: positive(box.dimW), dimH: positive(box.dimH), poids: positive(box.poids), volume,

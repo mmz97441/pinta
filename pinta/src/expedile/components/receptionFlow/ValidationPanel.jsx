@@ -1,20 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Check, Plus, RefreshCw } from 'lucide-react';
+import { Check, RefreshCw } from 'lucide-react';
 import { useApp } from '../../context/AppContext';
 import { getDestByCP } from '../../constants';
 import { randomId } from '../../lib/randomId';
 import { fetchArrivalNotices, fetchPendingReceptions, pendingValidationItems, receptionCartonsFor, validateReception, MAX_VALIDATION_DOSSIERS } from '../../lib/receptionValidation';
-import { receptionCartonManifest } from '../../domain/reception';
 import { formatDimensions, formatKg, orderValidationItems } from '../../domain/brouillon';
 import { arrivalChannel, renderArrivalNotice } from '../../services/arrivalNotice';
 import { deliverMessage } from '../../services/telegramApi';
-import { CONVERSATION_PERMISSIONS, Casier, ClientBand, FlaggedCartons, Note, SkeletonRows, TableFrame } from './ReceptionParts';
-import { clientPlace, count, definiteRefusal, firstName, notesSayDamaged, parisMoment, withoutRefreshAdvice } from './receptionFlowModel';
+import { CONVERSATION_PERMISSIONS, FlaggedCartons, Note, SkeletonRows, TableFrame } from './ReceptionParts';
+import { count, definiteRefusal, firstName, notesSayDamaged, parisMoment, readableError, withoutRefreshAdvice } from './receptionFlowModel';
 import { refreshClientRecord } from './receptionData';
 
-// Step 3, « Validation »: the cartons of this reception and the client's other cartons waiting for their validation
-// (list_pending_receptions), then « Valider la réception et prévenir [prénom] » in one tap: the notice is rendered
+// « À valider », the lower half of the screen « Cartons » (docs/specification-brouillon-reception-2026-10-28.md): the
+// cartons of this reception and the client's other cartons waiting for their validation (list_pending_receptions, read
+// again after each carton added), then « Valider N cartons et prévenir [prénom] » in one tap: the notice is rendered
 // (renderArrivalNotice), validate_reception records the validation and queues ONE message for every carton, and a
 // Telegram message is delivered at once. The request keeps its identifier until the server has answered: after a lost
 // answer the same request is replayed and the server returns what it recorded (nothing is sent twice).
@@ -78,10 +78,17 @@ export function validationBatch(pending, dossiers, render) {
   return { items: taken ? itemsOf(taken) : [], notice, rest: Math.max(0, total - taken), reason: cut ? 'text' : total > taken ? 'limit' : null };
 }
 
-export default function ValidationStep({ client, session, update, onAddCarton, onValidated, onResumeCarton }) {
+/**
+ * `version` grows with each carton added: the list is read again (kept on screen meanwhile). `focusOnOpen`: the screen
+ * was opened to validate (?valider=1), the title takes the focus. `typing`: a carton is being typed and not added yet,
+ * which a validation would leave out: the panel says so instead of validating (`onFinishTyping` brings back to the
+ * carton, `onClearTyping` empties it).
+ */
+export default function ValidationPanel({ client, session, update, version = 0, focusOnOpen = false, typing = false, onFinishTyping, onClearTyping, onValidated }) {
   const { data, settings, messageTemplates, can, setClients, refreshColis, ask } = useApp();
   const [pending, setPending] = useState(null);
   const [loadError, setLoadError] = useState('');
+  const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState('');
   const [failure, setFailure] = useState(null);
@@ -92,17 +99,25 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
 
+  // The list of the server; only the answer of the last reading is kept (a carton added meanwhile asks for another).
+  const reading = useRef(0);
   const load = useCallback(async () => {
-    setLoadError('');
-    try { setPending(await fetchPendingReceptions({ clientId: client.id })); }
-    catch (error) { setLoadError(error.message || 'La liste des cartons à valider n’a pas pu être lue.'); }
+    const turn = ++reading.current;
+    setLoading(true); setLoadError('');
+    try {
+      const rows = await fetchPendingReceptions({ clientId: client.id });
+      if (mounted.current && turn === reading.current) setPending(rows);
+    } catch (error) {
+      if (mounted.current && turn === reading.current) setLoadError(readableError(error, 'La liste des cartons à valider n’a pas pu être lue. Vérifiez la connexion, puis touchez « Réessayer ».', 'Réception · cartons à valider'));
+    } finally {
+      if (mounted.current && turn === reading.current) setLoading(false);
+    }
   }, [client.id]);
-  // The list of the server, and the client's contact as the server has it now (it decides the channel).
-  useEffect(() => {
-    load();
-    refreshClientRecord(client.id, setClients).catch(() => null);
-  }, [client.id, load, setClients]);
-  useEffect(() => { headingRef.current?.focus(); }, []);
+  useEffect(() => { load(); }, [load, version]);
+  // The client's contact as the server has it now, read again with the list: it decides the channel of the notice.
+  useEffect(() => { refreshClientRecord(client.id, setClients).catch(() => null); }, [client.id, setClients, version]);
+  // Near the top of the screen (the form waits behind one button): focused where it is.
+  useEffect(() => { if (focusOnOpen) headingRef.current?.focus({ preventScroll: true }); }, []);
   // A dossier listed but not loaded yet (a colleague's brouillon of a minute ago) is read: its invoices decide the
   // order of the validation and the variant of the notice.
   const requested = useRef(new Set());
@@ -130,6 +145,7 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
   const canNotify = Boolean(channel && allowed && notice.value?.canal && !notice.error);
   const savedKeys = new Set(session.saved.map(item => `${item.colisId}:${item.number}`));
   const blockedBy = session.validation ? 'validation' : session.intent ? 'intent' : null;
+  const severalDossiers = new Set(cartons.map(carton => carton.colisId)).size > 1;
 
   // The cartons flagged at the reception (damaged or opened, forbidden product): the notice does not mention them.
   const flagged = useMemo(() => cartons.map(carton => {
@@ -141,17 +157,6 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
   }).filter(Boolean), [cartons, session.saved, data]);
   const canOpenConversation = CONVERSATION_PERMISSIONS.some(can);
   const here = `/recevoir?${new URLSearchParams({ client: client.id, valider: '1' })}`;
-
-  // What is already in stock (validated before), beside the cartons waiting for their validation.
-  const known = [...new Set([...batch.items.map(item => item.colisId), session.target?.dossierId].filter(Boolean))].map(id => data.find(row => row.id === id)).filter(Boolean);
-  const waiting = (pending || []).filter(row => known.some(dossier => dossier.id === row.colisId)).reduce((sum, row) => sum + (row.cartons?.length || row.cartonCount || 0), 0);
-  const stock = Math.max(0, known.reduce((sum, dossier) => sum + receptionCartonManifest(dossier).nbColis, 0) - waiting);
-  const casiers = [...new Set(known.map(dossier => String(dossier.casier || '').trim()).filter(Boolean))];
-  const band = stock > 0 || casiers.length ? <>
-    {stock > 0 && `Déjà en stock : ${count(stock, 'carton')}`}{stock > 0 && casiers.length > 0 && ' · '}
-    {casiers.length === 1 && <Casier value={casiers[0]} />}
-    {casiers.length > 1 && <>Casiers {casiers.map((casier, index) => <React.Fragment key={casier}>{index > 0 && ', '}<span className="rf-code whitespace-nowrap font-bold">{casier}</span></React.Fragment>)}</>}
-  </> : null;
 
   /** `validation`: { args, rest, flagged }, kept in the session until the server has answered. */
   const run = async validation => {
@@ -176,11 +181,11 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
       await Promise.all([load(), refreshClientRecord(client.id, setClients).catch(() => null),
         ...(args.items || []).map(item => refreshColis(item.colisId).catch(() => null))]);
       if (!mounted.current) return;
-      const said = withoutRefreshAdvice(error.message);
+      const said = withoutRefreshAdvice(readableError(error, '', 'Réception · validation'));
       const refreshed = error.code === '40001' || /actualisez/i.test(error.message || '');
       setFailure({ message: refreshed
-        ? `${said || 'La réception a changé.'} La liste et le contact de ${name} sont actualisés : vérifiez, puis validez à nouveau.`
-        : said || 'La réception n’a pas été validée.' });
+        ? `${said || 'La réception a changé entre-temps.'} La liste et le contact de ${name} sont actualisés : vérifiez, puis validez à nouveau.`
+        : said || 'La réception n’a pas été validée. Réessayez dans un instant ; si cela continue, prévenez la direction.' });
       return;
     }
     const { validation: recorded, message } = result;
@@ -188,7 +193,7 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
     if (recorded.notify && recorded.canal === 'telegram' && message?.id) {
       setStatus('Envoi du message Telegram…');
       try { delivery = await deliverMessage(message.colisId || recorded.items[0]?.colisId, message.id); }
-      catch (error) { delivery = { ok: false, error: error.message }; }
+      catch (error) { delivery = { ok: false, error: readableError(error, 'réseau indisponible', 'Réception · envoi Telegram') }; }
     }
     // The notice as the server has it now (Telegram confirmed, e-mail to send…); otherwise what is known.
     let listed = null;
@@ -207,8 +212,9 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
     onValidated(recorded.id);
   };
 
+  const ready = !blockedBy && !typing && !loadError && !loading && batch.items.length > 0;
   const start = notify => {
-    if (busyRef.current || blockedBy || !batch.items.length || (notify && !canNotify)) return;
+    if (busyRef.current || !ready || (notify && !canNotify)) return;
     const args = notify
       ? { clientId: client.id, items: batch.items, notify: true, canal: notice.value.canal, template: notice.value.template, text: notice.value.text, requestId: randomId() }
       : { clientId: client.id, items: batch.items, notify: false, requestId: randomId() };
@@ -221,66 +227,56 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
   const startRef = useRef(start);
   startRef.current = start;
   const confirmQuiet = () => {
-    if (busyRef.current || blockedBy || !batch.items.length) return;
+    if (busyRef.current || !ready) return;
     ask(`Valider sans prévenir ${name} ?`, 'Aucun avis ne sera envoyé pour ces cartons.', () => { startRef.current(false); }, { okLabel: 'Valider sans prévenir' });
   };
 
-  const lastSaved = session.lastSaved;
   const reason = !channel
     ? <>{name} n’a ni Telegram ni e-mail : la réception sera validée sans avis. <Link className="rf-note-link" to={`/clients/${encodeURIComponent(client.id)}`}>Compléter sa fiche</Link> pour envoyer les prochains avis.</>
     : !allowed ? `Votre accès ne permet pas de prévenir ${name} par ${channel === 'telegram' ? 'Telegram' : 'e-mail'} : validez sans prévenir, ou demandez à un collègue autorisé de valider la réception.`
       : notice.error ? `L’avis d’arrivée n’a pas pu être préparé : ${String(notice.error).replace(/[.\s]+$/, '')}. Corrigez le modèle « Avis d’arrivée » dans Paramètres, ou validez sans prévenir.` : null;
   const explanation = channel === 'telegram'
-    ? `En validant, ${name} reçoit un seul message Telegram pour ${count(cartons.length, 'colis', 'colis')}.`
-    : `En validant, l’e-mail pour ${name} est préparé pour ${count(cartons.length, 'colis', 'colis')} : vous le copierez pour l’envoyer depuis votre messagerie (l’envoi automatique des e-mails n’est pas encore branché).`;
+    ? `${name} recevra un seul message Telegram pour ${count(cartons.length, 'colis', 'colis')}.`
+    : `L’e-mail pour ${name} sera préparé pour ${count(cartons.length, 'colis', 'colis')} : vous le copierez pour l’envoyer depuis votre messagerie (l’envoi automatique des e-mails n’est pas encore branché).`;
   const rest = batch.reason === 'text'
     ? `Encore ${count(batch.rest, 'carton')} à valider ensuite : un avis d’arrivée ne peut pas en annoncer davantage en un seul message. Validez-les juste après celle-ci, avec un second avis.`
     : `Encore ${count(batch.rest, 'carton')} à valider ensuite : une validation compte au plus ${MAX_VALIDATION_DOSSIERS} dossiers et ${MAX_CARTONS} cartons. Validez-les juste après celle-ci.`;
+  const title = cartons.length ? `À valider : ${count(cartons.length, 'carton')}` : 'À valider';
+  const label = `Valider ${count(cartons.length, 'carton')}`;
 
-  return <section aria-labelledby="rf-step-title" className="space-y-4">
-    <ClientBand client={client} place={clientPlace(client)} detail={band} />
-    {lastSaved && !blockedBy && <Note tone="success" role="status">
-      Carton n° {lastSaved.number} enregistré dans <span className="rf-code whitespace-nowrap font-bold">{lastSaved.ref}</span>{lastSaved.created ? ' (nouveau brouillon)' : ''}.
-      {lastSaved.changed && <span className="mt-1 block">Ce brouillon a été complété depuis par un collègue : il reste ouvert, vos prochains cartons s’y ajoutent.</span>}
-      {lastSaved.photoWarning && <span className="mt-1 block">{lastSaved.photoWarning}</span>}
-    </Note>}
-    <h2 id="rf-step-title" ref={headingRef} tabIndex={-1} className="rf-strong text-[26px] font-extrabold outline-none">
-      {pending === null && !loadError ? 'Cette réception' : `Cette réception : ${count(cartons.length, 'carton')}`}
-    </h2>
+  return <section id="rf-validation" aria-labelledby="rf-validation-title" className="rf-validation space-y-4">
+    <h2 id="rf-validation-title" ref={headingRef} tabIndex={-1} className="rf-strong text-[24px] font-extrabold outline-none sm:text-[26px]">{title}</h2>
 
-    {blockedBy === 'intent' && <Note tone="warning" role="alert" title="Un carton est à vérifier" action={<button type="button" className="rf-small-action" onClick={onResumeCarton}>Vérifier l’enregistrement</button>}>
-      La connexion a été interrompue pendant l’enregistrement d’un carton. Vérifiez son enregistrement avant de valider la réception.
-    </Note>}
+    {blockedBy === 'intent' && <Note tone="warning" role="note">Vérifiez d’abord l’enregistrement du carton ci-dessus («&nbsp;Vérifier l’enregistrement&nbsp;») : la réception se valide ensuite.</Note>}
     {blockedBy === 'validation' && <Note tone="warning" role="alert" title="Validation à vérifier" action={<button type="button" className="rf-small-action inline-flex items-center gap-2" disabled={busy} onClick={() => run(session.validation)}><RefreshCw size={18} aria-hidden="true" />{busy ? 'Vérification…' : 'Vérifier la validation'}</button>}>
       La connexion a été interrompue pendant la validation : nous ne savons pas si elle est enregistrée. Touchez «&nbsp;Vérifier la validation&nbsp;» quand le réseau revient : rien ne sera validé ni envoyé deux fois.
     </Note>}
 
-    {loadError && <Note tone="danger" role="alert" action={<button type="button" className="rf-small-action" onClick={load}>Réessayer</button>}>{loadError}</Note>}
-    {pending === null && !loadError && <SkeletonRows label="Chargement des cartons à valider…" />}
-    {pending !== null && !cartons.length && !blockedBy && <Note tone="info">Aucun carton n’attend de validation pour {client.nom}. Ajoutez un carton, ou revenez au Brouillon.</Note>}
+    {loadError && <Note tone="danger" role="alert" action={<button type="button" className="rf-small-action" onClick={load} disabled={loading}>{loading ? 'Lecture…' : 'Réessayer'}</button>}>{loadError}</Note>}
+    {pending === null && !loadError && <SkeletonRows label="Lecture des cartons à valider…" />}
+    {pending !== null && !cartons.length && !blockedBy && (focusOnOpen
+      ? <Note tone="info">Aucun carton n’attend de validation pour {client.nom}. Ajoutez un carton, ou revenez aux colis.</Note>
+      : <p className="rf-muted text-[16px]">Les cartons que vous ajoutez s’affichent ici. Vous les validez ensuite tous ensemble{channel ? ` : ${name} recevra un seul message` : ''}.</p>)}
 
     {cartons.length > 0 && <TableFrame label="Cartons à valider">
-      <table className="rf-table">
+      <table className="rf-table" aria-busy={loading ? 'true' : undefined}>
         <caption className="sr-only">Cartons à valider pour {client.nom}</caption>
         <thead><tr>
-          <th scope="col">N°</th><th scope="col">Vendu par</th><th scope="col">Numéro de suivi</th>
-          <th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th><th scope="col">Dossier</th><th scope="col">Reçu</th>
+          <th scope="col">N°</th><th scope="col">Carton</th><th scope="col">Dimensions</th><th scope="col" data-align="right">Poids</th>
+          {severalDossiers && <th scope="col">Dossier</th>}<th scope="col">Reçu</th>
         </tr></thead>
         <tbody>{cartons.map(carton => {
           const mine = savedKeys.has(`${carton.colisId}:${carton.carton}`);
           const moment = parisMoment(carton.receivedAt);
           return <tr key={`${carton.colisId}:${carton.carton}`}>
             <th scope="row"><span className="rf-carton-number"><span className="sr-only">Carton </span>{carton.carton}</span></th>
-            <td className="min-w-[7rem] text-[17px] font-bold">{carton.fournisseur || <span className="rf-muted font-semibold">Non renseigné</span>}</td>
-            <td className="whitespace-nowrap">{carton.number ? <span className="rf-code">{carton.number}</span> : <span className="rf-muted">Sans numéro de suivi</span>}</td>
+            <td className="rf-cell-text">
+              <span className="block text-[17px] font-bold">{carton.fournisseur || <span className="rf-muted font-semibold">Vendeur non renseigné</span>}</span>
+              <span className="block">{carton.number ? <span className="rf-code">{carton.number}</span> : <span className="rf-muted">Sans numéro de suivi</span>}</span>
+            </td>
             <td className="whitespace-nowrap">{formatDimensions(carton)}</td>
             <td className="whitespace-nowrap font-semibold" data-align="right">{formatKg(carton.poids)}</td>
-            {/* Every carton listed waits for its validation (its state); when it arrived tells those of this reception
-                from those recorded earlier, which the notice announces as well. */}
-            <td className="whitespace-nowrap">
-              <span className="rf-code block font-semibold">{carton.ref}</span>
-              <span className="rf-muted block text-[15px]">pas encore validé</span>
-            </td>
+            {severalDossiers && <td className="whitespace-nowrap"><span className="rf-code font-semibold">{carton.ref}</span></td>}
             <td className="whitespace-nowrap">
               {moment ? <><span className="block">{moment.day}</span><span className="rf-muted block text-[15px]">{moment.time}{mine ? ' · cette réception' : ''}</span></>
                 : <span className="rf-muted">{mine ? 'Cette réception' : 'Plus tôt'}</span>}
@@ -292,21 +288,24 @@ export default function ValidationStep({ client, session, update, onAddCarton, o
     {batch.rest > 0 && cartons.length > 0 && <Note tone="info">{rest}</Note>}
     {cartons.length > 0 && <FlaggedCartons flagged={flagged} name={name} title={`À signaler à ${name} vous-même`} returnTo={here} canOpen={canOpenConversation} notice={canNotify} />}
 
-    <button type="button" onClick={onAddCarton} disabled={busy} className="rf-secondary flex w-full items-center justify-center gap-2 px-4"><Plus size={22} aria-hidden="true" />Ajouter un autre carton pour {name}</button>
-
-    {cartons.length > 0 && !blockedBy && <>
-      {canNotify ? <Note tone="info">{explanation}</Note> : <Note tone="warning">{reason}</Note>}
-      {canNotify && notice.value?.text && <details className="rf-card rounded-2xl px-4">
-        <summary className="rf-strong min-h-11 cursor-pointer py-3 text-[16px] font-semibold">Voir le message</summary>
-        <pre className="rf-message pb-4">{notice.value.text}</pre>
-      </details>}
-      <div className="flex flex-col items-stretch gap-1">
-        {canNotify
-          ? <button type="button" onClick={() => start(true)} disabled={busy} className="rf-primary brand-bg flex w-full items-center justify-center gap-2.5 px-4"><Check size={24} strokeWidth={2.6} aria-hidden="true" />{busy ? 'Validation…' : `Valider la réception et prévenir ${name}`}</button>
-          : <button type="button" onClick={confirmQuiet} disabled={busy} className="rf-primary brand-bg flex w-full items-center justify-center gap-2.5 px-4"><Check size={24} strokeWidth={2.6} aria-hidden="true" />{busy ? 'Validation…' : 'Valider sans prévenir'}</button>}
-        {canNotify && <button type="button" onClick={confirmQuiet} disabled={busy} className="rf-quiet self-center">Valider sans prévenir</button>}
-      </div>
-    </>}
+    {cartons.length > 0 && !blockedBy && !loadError && (typing
+      ? <Note tone="warning" role="note" title="Un carton est en cours de saisie"
+        action={<><button type="button" className="rf-small-action" onClick={onFinishTyping}>Terminer ce carton</button><button type="button" className="rf-small-action" onClick={onClearTyping}>Effacer la saisie</button></>}>
+        Ajoutez-le avec «&nbsp;Ajouter ce carton&nbsp;», ou effacez la saisie, puis validez la réception.
+      </Note>
+      : <>
+        {canNotify ? <Note tone="info">{explanation}</Note> : <Note tone="warning">{reason}</Note>}
+        {canNotify && notice.value?.text && <details className="rf-card rounded-2xl px-4">
+          <summary className="rf-strong min-h-11 cursor-pointer py-3 text-[16px] font-semibold">Voir le message</summary>
+          <pre className="rf-message pb-4">{notice.value.text}</pre>
+        </details>}
+        <div className="flex flex-col items-stretch gap-1">
+          {canNotify
+            ? <button type="button" onClick={() => start(true)} disabled={busy || loading} className="rf-validate flex w-full items-center justify-center gap-2.5 px-4"><Check size={24} strokeWidth={2.6} aria-hidden="true" />{busy ? 'Validation…' : `${label} et prévenir ${name}`}</button>
+            : <button type="button" onClick={confirmQuiet} disabled={busy || loading} className="rf-validate flex w-full items-center justify-center gap-2.5 px-4"><Check size={24} strokeWidth={2.6} aria-hidden="true" />{busy ? 'Validation…' : `${label} sans prévenir`}</button>}
+          {canNotify && <button type="button" onClick={confirmQuiet} disabled={busy || loading} className="rf-quiet self-center">Valider sans prévenir</button>}
+        </div>
+      </>)}
     <p role="status" aria-live="polite" className={status && !failure ? 'rf-muted text-center text-[15px] font-semibold' : 'sr-only'}>{status}</p>
     {failure && !failure.uncertain && <Note tone="danger" role="alert" title="La réception n’est pas validée">{failure.message}</Note>}
   </section>;

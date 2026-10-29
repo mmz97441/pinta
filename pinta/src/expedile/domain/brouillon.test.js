@@ -3,8 +3,8 @@ import assert from 'node:assert/strict';
 import {
   ARRIVAL_NOTICE_STATES, BROUILLON_STAGES, COLIS_DEFAULT_SORT, COLIS_DEFAULT_TAB, COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_ACTION_LABEL,
   NOTICE_SEND_CHECK_MINUTES, PAID_TOTAL_STATE, actionAllowed, arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3,
-  colisActionHref, colisRow, colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3,
-  groupColisRowsByDeparture, orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
+  colisActionHref, colisRow, colisSearchMatch, colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3,
+  groupColisRowsByDeparture, groupColisRowsByDestination, NO_DESTINATION_GROUP_KEY, orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
 } from './brouillon.js';
 import { workspaceReturnPath } from './navigation.js';
 import { STATUTS } from '../constants/index.js';
@@ -93,10 +93,12 @@ test('each internal status belongs to exactly one tab; archived and cancelled do
   for (const value of [undefined, '', 'tout', 'BROUILLON']) assert.equal(colisTabKey(value), 'brouillon');
 });
 
-test('the four sorts, « Par nom » by default, « Par montant » marked financial', () => {
-  assert.deepEqual(COLIS_SORTS.map(sort => [sort.key, sort.label, Boolean(sort.financial)]), [['nom', 'Par nom', false], ['depart', 'Par date d’envoi', false], ['reception', 'Par réception', false], ['montant', 'Par montant', true]]);
+test('the five sorts, « Par nom » by default, « Par montant » marked financial', () => {
+  assert.deepEqual(COLIS_SORTS.map(sort => [sort.key, sort.label, Boolean(sort.financial)]), [['nom', 'Par nom', false], ['depart', 'Par date d’envoi', false],
+    ['destination', 'Par destination', false], ['reception', 'Par réception', false], ['montant', 'Par montant', true]]);
   assert.equal(COLIS_DEFAULT_SORT, 'nom');
   assert.equal(colisSortKey('montant'), 'montant');
+  assert.equal(colisSortKey('destination'), 'destination');
   for (const value of [undefined, '', 'prix']) assert.equal(colisSortKey(value), 'nom');
 });
 
@@ -490,7 +492,8 @@ test('a task held by a colleague: the step says who, from the team’s tasks; wi
 test('a row gives the client, the cartons received, the step, the total and the departure ready to show', () => {
   const row = colisRow({ ...measured, devisTransport: 70, devisOM: 10 }, ctx());
   assert.deepEqual(Object.keys(row).sort(), ['action', 'cartons', 'cartonsLabel', 'casier', 'casierLabel', 'clientId', 'clientKnown', 'clientName', 'clientType', 'clientTypeLabel', 'commune',
-    'departure', 'destinationCode', 'destinationLabel', 'ficheHref', 'id', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchText', 'stage', 'statut', 'tab', 'total', 'volume', 'volumeLabel'].sort());
+    'departure', 'destinationCode', 'destinationLabel', 'dimensions', 'ficheHref', 'id', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchCodes', 'searchText',
+    'stage', 'statut', 'tab', 'total', 'volume', 'volumeLabel'].sort());
   assert.deepEqual([row.id, row.ref, row.statut, row.tab, row.clientId, row.clientName, row.clientType, row.clientTypeLabel, row.destinationCode, row.destinationLabel, row.commune],
     ['d-1', 'EXP-AAA111', 'mesure', 'brouillon', 'c-flavie', 'PAYET Flavie', 'particulier', 'Particulier', '974', 'Réunion', 'Sainte-Clotilde']);
   assert.deepEqual([row.cartons, row.cartonsLabel, row.pendingCartons, row.casier, row.casierLabel, row.poids, row.poidsLabel, row.volumeLabel],
@@ -601,6 +604,62 @@ test('the search finds a name, a reference, a casier or a tracking number, scann
   assert.deepEqual(ids('introuvable'), []);
 });
 
+test('the search finds a dossier by its expedition: the departure’s reference and the carrier’s number', () => {
+  const shipped = [...envois, { id: 'e-air', ref: 'ENV-2026-037', date: '2026-10-30', statut: 'expedie', destinationCode: '974', trackingPrincipal: '235-1234 5675', loadingClosesAt: null, departedAt: '2026-10-30T06:00:00Z' }];
+  const rows = [
+    colisRow({ ...paid, id: 'd-air', envoi: 'e-air', statut: 'expedie' }, ctx({ envois: shipped })),
+    colisRow({ ...paid, id: 'd-soon', ref: 'EXP-DDD444', clientId: zoe.id }, ctx({ envois: shipped })),
+    ...searchRows(),
+  ];
+  const ids = query => filterColisRows(rows, query).map(row => row.id);
+  assert.deepEqual(ids('ENV-2026-037'), ['d-air']);
+  assert.deepEqual(ids('env 2026 037'), ['d-air'], 'Typed with spaces.');
+  assert.deepEqual(ids('ENV2026037'), ['d-air'], 'Typed without its dashes.');
+  assert.deepEqual(ids('23512345675'), ['d-air'], 'The carrier’s number, scanned without its dash and space.');
+  assert.deepEqual(ids('235-1234 5675'), ['d-air']);
+  assert.deepEqual(ids('ENV-29'), ['d-soon'], 'Another departure, by its reference.');
+  // What matched, said on the line: a number only, never a name.
+  const match = (id, query) => colisSearchMatch(rows.find(row => row.id === id), query);
+  assert.equal(match('d-air', 'ENV-2026-037'), 'Départ ENV-2026-037');
+  assert.equal(match('d-air', '23512345675'), 'Expédition 235-1234 5675');
+  assert.equal(match('d-1', '6A12345678901'), 'Suivi 6A 123 456 789 01 · carton 1');
+  assert.equal(match('d-1', 'cb998877665fr'), 'Suivi CB998877665FR · carton 2');
+  assert.equal(match('d-2', '1Z999AA'), 'Suivi 1Z999AA10123456784 · carton 1', 'Part of the number.');
+  assert.equal(match('d-2', 'exp-bbb222'), 'Dossier EXP-BBB222');
+  assert.equal(match('d-2', 'bbb222'), 'Dossier EXP-BBB222');
+  assert.equal(match('d-2', 'EXP-BBB222-1-2'), 'Colis 1/2 · EXP-BBB222', 'A parcel label scanned.');
+  assert.equal(match('d-1', 'payet'), null, 'A name: the line says it already.');
+  assert.equal(match('d-1', '6A'), null, 'Too short to be a number.');
+  assert.equal(match('d-1', ''), null);
+  assert.equal(match('d-2', 'ENV-2026-037'), null, 'A number of another dossier.');
+  assert.equal(colisSearchMatch(null, 'ENV'), null);
+  // One carton: no carton number. A tracking number recorded without its carton detail (former dossiers) is found
+  // and said too.
+  const former = colisRow(legacySingle, ctx());
+  assert.deepEqual(filterColisRows([former], 'legacy1').map(row => row.id), ['d-old']);
+  assert.equal(colisSearchMatch(former, 'legacy1'), 'Suivi LEGACY1');
+});
+
+test('the dimensions of a row: each carton received, the parcels to ship once prepared, never a false zero', () => {
+  const two = colisRow(measured, ctx()).dimensions;
+  assert.deepEqual(two, { prepared: false, lines: ['40 × 30 × 20 cm', '30 × 20 × 10 cm'], shown: ['40 × 30 × 20 cm', '30 × 20 × 10 cm'], moreLabel: null, label: '40 × 30 × 20 cm · 30 × 20 × 10 cm' });
+  // French decimals; a carton without its three sides is « À mesurer ».
+  const partial = colisRow({ ...measured, dimsParColis: [box(35.5, 28, 18, 2), box(30, null, 10, 1)] }, ctx()).dimensions;
+  assert.deepEqual(partial.lines, ['35,5 × 28 × 18 cm', MEASURE_MISSING_LABEL]);
+  // Five cartons: three lines, the others counted.
+  const five = colisRow({ ...measured, nbColis: 5, trackings: [], trackingsDetail: [], dimsParColis: [box(10, 10, 10, 1), box(20, 20, 20, 1), box(30, 30, 30, 1), box(40, 40, 40, 1), box(50, 50, 50, 1)] }, ctx()).dimensions;
+  assert.deepEqual([five.lines.length, five.shown, five.moreLabel], [5, ['10 × 10 × 10 cm', '20 × 20 × 20 cm', '30 × 30 × 30 cm'], '+ 2 autres']);
+  assert.equal(colisRow({ ...measured, nbColis: 4, trackings: [], trackingsDetail: [], dimsParColis: [box(10, 10, 10, 1), box(20, 20, 20, 1), box(30, 30, 30, 1), box(40, 40, 40, 1)] }, ctx()).dimensions.moreLabel, '+ 1 autre');
+  // Prepared: the parcels to ship, from the saved packages or the single legacy final box.
+  assert.deepEqual(colisRow(prepared, ctx()).dimensions, { prepared: true, lines: ['40 × 30 × 15 cm'], shown: ['40 × 30 × 15 cm'], moreLabel: null, label: '40 × 30 × 15 cm' });
+  assert.deepEqual(colisRow({ ...prepared, finalPackages: null, finL: 60, finW: 40, finH: 40, finP: 12 }, ctx()).dimensions.lines, ['60 × 40 × 40 cm']);
+  // A preparation of earlier cartons does not count: the cartons received are shown.
+  assert.deepEqual(colisRow({ ...prepared, finalMeasurementsVersion: 2 }, ctx()).dimensions.prepared, false);
+  // A former single carton keeps its own measures; several cartons without theirs are « À mesurer ».
+  assert.deepEqual(colisRow(legacySingle, ctx()).dimensions.lines, ['50 × 40 × 30 cm']);
+  assert.deepEqual(colisRow({ ...legacySingle, nbColis: 2, trackings: [] }, ctx()).dimensions.lines, [MEASURE_MISSING_LABEL, MEASURE_MISSING_LABEL]);
+});
+
 test('« Par nom » is alphabetical, accents and case aside, an unknown client last', () => {
   const rows = [
     rowFor({ ...measured, id: 'd-payet' }),
@@ -651,6 +710,38 @@ test('« Par date d’envoi » groups by departure, soonest first, then « Dépa
   // The same order as a flat list, by name inside a departure (ÉBRARD before PAYET).
   assert.deepEqual(sortColisRows(rows, 'depart', { now }).map(row => row.id), ['d-soon-b', 'd-soon-a', 'd-later', 'd-wish', 'd-past', 'd-hidden', 'd-none']);
   assert.deepEqual(sortColisRows([rows[6], rows[5]], 'depart', { now }).map(row => row.id), ['d-soon-b', 'd-soon-a'], 'Whatever the incoming order.');
+});
+
+test('« Par destination » groups by destination, Réunion, Mayotte, Guadeloupe, Martinique, then the unknown ones, by name inside', () => {
+  const lea = { id: 'c-lea', nom: 'BOURGEOIS Léa', nomFamille: 'BOURGEOIS', prenom: 'Léa', type: 'particulier', cp: '97110', ville: 'Pointe-à-Pitre' };
+  const noPostcode = { id: 'c-nocp', nom: 'ADAM Marc', nomFamille: 'ADAM', prenom: 'Marc', type: 'particulier', cp: '', ville: '' };
+  const abroad = { id: 'c-abroad', nom: 'MARTIN Luc', nomFamille: 'MARTIN', prenom: 'Luc', type: 'particulier', cp: '75011', ville: 'Paris' };
+  const more = new Map([...clients, [lea.id, lea], [noPostcode.id, noPostcode], [abroad.id, abroad]]);
+  const at = (dossier) => colisRow(dossier, ctx({ getClient: id => more.get(id) || null }));
+  const rows = [
+    at({ ...measured, id: 'd-payet' }),
+    at({ ...measured, id: 'd-adam', clientId: noPostcode.id }),
+    at({ ...measured, id: 'd-lea', clientId: lea.id }),
+    at({ ...quoted, id: 'd-hoarau', clientId: pro.id }),
+    at({ ...measured, id: 'd-durand', clientId: paul.id }),
+    at({ ...measured, id: 'd-martin', clientId: abroad.id }),
+    at({ ...measured, id: 'd-ebrard', clientId: zoe.id }),
+  ];
+  const groups = groupColisRowsByDestination(rows);
+  assert.deepEqual(groups.map(group => [group.key, group.code, group.label, group.rows.map(row => row.id)]), [
+    ['destination:974', '974', 'Réunion', ['d-durand', 'd-ebrard', 'd-payet']],
+    ['destination:976', '976', 'Mayotte', ['d-hoarau']],
+    ['destination:971', '971', 'Guadeloupe', ['d-lea']],
+    [NO_DESTINATION_GROUP_KEY, null, 'Destination à vérifier', ['d-adam', 'd-martin']],
+  ]);
+  const [reunion] = groups;
+  assert.deepEqual([reunion.totals.clients, reunion.totals.dossiers, reunion.totals.labels.clients], [3, 3, '3 clients']);
+  assert.equal(groups[1].totals.montantConnu, 95.06, 'The known amount of the group, with the right to see it.');
+  // The same order as a flat list, whatever the incoming order; the list given is not reordered.
+  assert.deepEqual(sortColisRows(rows, 'destination').map(row => row.id), ['d-durand', 'd-ebrard', 'd-payet', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
+  assert.deepEqual(sortColisRows([...rows].reverse(), 'destination').map(row => row.id), ['d-durand', 'd-ebrard', 'd-payet', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
+  assert.equal(rows[0].id, 'd-payet');
+  assert.deepEqual(groupColisRowsByDestination([]), []);
 });
 
 test('the totals of the stock shown: clients, cartons, kilograms, m³, the known amount and how many prices are known', () => {

@@ -39,7 +39,7 @@ En haut de l'onglet : nombre de clients, de cartons, poids et volume du stock af
 ### Une ligne par dossier
 
 - **Client** : nom, destination et commune.
-- **Colis** : nombre de cartons, casier, poids réel et volume (m³) des cartons reçus.
+- **Colis** : nombre de cartons, casier, poids réel et volume (m³) des cartons reçus, et leurs dimensions (une ligne par carton, trois au plus puis « + N autres » ; après la préparation, celles des colis préparés, précédées de « Préparé : »).
 - **Où en est-on** : une étape en mots simples et une précision d'une ligne.
 - **Total à payer** : total du devis enregistré et actif, sinon « À calculer ». Jamais un faux zéro.
 - **Une action**, ou « Rien à faire » quand le dossier attend quelqu'un d'autre.
@@ -66,8 +66,9 @@ Quatre choix toujours visibles sur tablette, un menu sur téléphone :
 - **Par date d'envoi** : regroupé par départ, du plus proche au plus lointain, puis « Départ à choisir ». Chaque groupe affiche la date, la destination, la clôture et ses totaux (clients, cartons, kg, m³, montant connu et nombre de dossiers dont le prix est connu).
 - **Par réception** : date du dernier carton reçu, du plus récent au plus ancien.
 - **Par montant** : total du devis, les dossiers sans prix en dernier.
+- **Par destination** : regroupé par destination (Réunion, Mayotte, Guadeloupe, Martinique), puis « Destination à vérifier » ; dans chaque groupe, par nom.
 
-La recherche porte sur le nom, la référence du dossier, le casier et les numéros de suivi. Le scanner remplit la recherche.
+La recherche porte sur le nom, la référence du dossier, le casier, le numéro de suivi de chaque carton, la référence du départ (ENV-…) et le numéro d'expédition du transporteur (avec ou sans espaces ni tirets). Le scanner remplit la recherche. Une ligne trouvée par un numéro dit ce qui correspond : « Colis 2/3 · EXP-… », « Départ ENV-… », « Expédition … ».
 
 ### Fiche Brouillon d'un client
 
@@ -83,9 +84,11 @@ Sur téléphone, l'ordre devient : total et action, colis après optimisation, c
 ## Réception
 
 1. **Pour quel client ?** Recherche par nom, téléphone ou numéro client. Chaque résultat annonce ce qui va se passer : « Le carton rejoint son brouillon » (dossier ouvert avant devis), ou « Nouveau brouillon » (aucun dossier ouvert, ou devis déjà envoyé). Lien « Créer un nouveau client ».
-2. **Le carton.** Numéro de suivi (scan ou saisie, facultatif), vendeur (facultatif), quatre mesures obligatoires (longueur, largeur, hauteur en cm, poids en kg), « Carton abîmé ou ouvert » (photo demandée), et le contrôle des produits interdits en avion tel qu'il existe aujourd'hui. Pour un nouveau brouillon, le casier est demandé. **Chaque carton est enregistré dès « Ajouter ce carton »** : rien n'est perdu si la tablette s'éteint.
-3. **Validation.** La liste des cartons saisis pendant cette réception, « Ajouter un autre carton », puis **« Valider la réception et prévenir [prénom] »**. Lien discret « Valider sans prévenir ».
-4. **Rangement.** Le casier en très grand, le nombre de cartons du brouillon, l'état de l'avis d'arrivée, et le rappel quand l'accord du client doit être redemandé. Boutons « Client suivant » et « Voir le Brouillon ».
+2. **Cartons**, sur un seul écran (depuis le 29 octobre).
+   - **Ajouter un carton** : numéro de suivi (scan ou saisie, facultatif), vendeur (facultatif), quatre mesures obligatoires (longueur, largeur, hauteur en cm, poids en kg), et « Signaler un problème » : « Carton abîmé ou ouvert » (photo demandée) et « Produit interdit » (la liste des produits interdits en avion). Pour un nouveau brouillon, le casier est demandé. **Chaque carton est enregistré dès « Ajouter ce carton »** : rien n'est perdu si la tablette s'éteint. Le formulaire se vide aussitôt, prêt pour le scan suivant ; Entrée sur le poids enregistre le carton.
+   - **À valider** : sous le formulaire, tous les cartons du client qui attendent leur validation (ceux de cette réception et ceux enregistrés plus tôt), relus après chaque carton. Puis **« Valider N cartons et prévenir [prénom] »** (un seul avis pour tous) et le lien discret « Valider sans prévenir ». Un carton en cours de saisie bloque la validation (« Terminer ce carton » ou « Effacer la saisie ») : il n'est jamais oublié.
+   - Ouvert depuis « Valider la réception » (Colis, Avis d'arrivée), l'écran montre d'abord la liste à valider ; le formulaire attend derrière « Ajouter un carton pour [prénom] ».
+3. **Rangement.** Le casier en très grand, le nombre de cartons du brouillon, l'état de l'avis d'arrivée, et le rappel quand l'accord du client doit être redemandé. Boutons « Client suivant » et « Voir le Brouillon ».
 
 ## Avis d'arrivée
 
@@ -160,7 +163,7 @@ Aucune commande existante n'est redéfinie : ni `queue_message`, ni `append_rece
 |---|---|---|
 | `/` | Colis : onglets (`?onglet=brouillon|a_payer|pret|parti`), classement (`?classer=nom|depart|reception|montant`), recherche (`?q=`) | équipe |
 | `/brouillon/:id` | Fiche Brouillon du dossier `:id` | équipe |
-| `/recevoir` | Réception en quatre étapes (`?client=<id>`, `?dossier=<id>`, `?client=<id>&valider=1` ouvre directement la validation) | `perm_colis_receptionner` |
+| `/recevoir` | Réception en trois étapes (`?client=<id>` ou `?dossier=<id>` : l'écran des cartons ; `?client=<id>&valider=1` : le même écran, ouvert pour valider ; `?client=<id>&valide=<validation>` : le rangement) | `perm_colis_receptionner` |
 | `/avis` | Avis d'arrivée : réceptions à valider et avis envoyés | équipe |
 | `/travail` | Mon travail (ancien accueil) | équipe |
 | `/colis`, `/colis/:id`, `/reception` | Inchangés : vue détaillée (« Dossiers », « Tout le dossier ») et ancien écran de réception | inchangé |
@@ -174,12 +177,14 @@ Module pur (imports avec extension `.js`, testé par `node --test`, compatible S
 | Fonction | Rôle |
 |---|---|
 | `COLIS_TABS`, `colisTab(dossier)` | Onglet du dossier, ou `null` (archivé, annulé) |
-| `COLIS_SORTS` | Par nom, Par date d'envoi, Par réception, Par montant |
+| `COLIS_SORTS` | Par nom, Par date d'envoi, Par réception, Par montant, Par destination |
 | `pendingByColis(pendingList)` | Index des réceptions à valider (résultat de `fetchPendingReceptions`) par dossier |
 | `colisStage(dossier, ctx)` | `{key, label, detail, tone, action}` ; `action` = `{key, label, task}` ou `null` (« Rien à faire ») |
-| `colisRow(dossier, ctx)` | Ligne : `id, ref, clientId, clientName, clientType, destinationLabel, commune, cartons, casier, poids, volume, lastReceivedAt, stage, action, total:{amount, label, visible}, departure:{key, date, label, closingLabel}, searchText` |
-| `filterColisRows(rows, q)`, `sortColisRows(rows, key)` | Recherche (nom, référence, casier, numéros de suivi) et tri (dossiers sans prix ou sans date en dernier) |
+| `colisRow(dossier, ctx)` | Ligne : `id, ref, clientId, clientName, clientType, destinationLabel, commune, cartons, casier, poids, volume, dimensions:{prepared, lines, shown, moreLabel, label}, lastReceivedAt, stage, action, total:{amount, label, visible}, departure:{key, date, label, closingLabel}, searchCodes, searchText` |
+| `filterColisRows(rows, q)`, `sortColisRows(rows, key)` | Recherche (nom, référence, casier, numéros de suivi, départ, numéro d'expédition) et tri (dossiers sans prix ou sans date en dernier) |
+| `colisSearchMatch(row, q)` | Ce qui correspond à un numéro cherché (« Colis 2/3 · EXP-… », « Départ ENV-… », « Expédition … »), ou `null` |
 | `groupColisRowsByDeparture(rows)` | Groupes par départ, du plus proche au plus lointain, puis « Départ à choisir », chacun avec ses totaux |
+| `groupColisRowsByDestination(rows)` | Groupes par destination, puis « Destination à vérifier » (`NO_DESTINATION_GROUP_KEY`), chacun avec ses totaux |
 | `colisTotals(rows)` | `{clients, dossiers, cartons, poids, volume, montantConnu, prixConnus}` |
 | `brouillonFiche(dossier, ctx)` | En-tête, cartons reçus (et lesquels attendent la validation), colis après optimisation et gain de volume, prix depuis le devis enregistré seulement (ou ce qui manque), dernier avis, action |
 | `arrivalNoticeState(notice)` | `sans_avis` « Sans avis », `en_cours` « En cours d'envoi », `envoye` « Envoyé », `remis` « Remis », `a_envoyer` « À envoyer », `non_remis` « Non remis » (avec la raison), `annule` « Annulé » |
@@ -215,7 +220,8 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 `ReceptionFlow.jsx` (route `/recevoir`) et `ArrivalNotices.jsx` (route `/avis`).
 
 - Enregistrement de chaque carton par les chemins existants, avec leurs garanties : premier carton d'un nouveau brouillon par `sb.insertColis(…, {createId})`, les suivants et l'ajout à un brouillon par `sb.appendReceptionCartons(id, [carton], {requestId, expectedUpdatedAt, casier, notesReception, checkInterdits})`. Même traitement des erreurs incertaines que `ColisModal` (identifiant stable par tentative, « Vérifier l'enregistrement »), brouillon de saisie conservé en `sessionStorage`. Contrôle des produits interdits proposé à chaque carton.
-- Validation : cartons de cette réception plus les autres cartons du client qui attendent leur validation ; `renderArrivalNotice` puis `validateReception` ; si Telegram, `deliverMessage(colisId, messageId)` aussitôt ; si e-mail, état « À envoyer » et texte à copier. Client sans moyen de contact : seul « Valider sans prévenir » est proposé, avec la raison.
+- Validation, sous le formulaire du même écran (`CartonsStep` = `CartonForm` + `ValidationPanel`) : cartons de cette réception plus les autres cartons du client qui attendent leur validation, relus après chaque carton ; `renderArrivalNotice` puis `validateReception` ; si Telegram, `deliverMessage(colisId, messageId)` aussitôt ; si e-mail, état « À envoyer » et texte à copier. Client sans moyen de contact : seul « Valider N cartons sans prévenir » est proposé, avec la raison. Une liste illisible (réseau, serveur) n'est jamais validée : « Réessayer ».
+- Messages d'erreur : une réponse technique (fonction inconnue du serveur, réseau, message en anglais) n'est jamais affichée ; l'équipe lit une phrase en français et ce qu'elle peut faire (`utils/readableError.js`), le détail part dans la console.
 - Rangement : casier en très grand, nombre de cartons du brouillon, état de l'avis, rappel quand l'accord est à redemander ; « Client suivant », « Voir le Brouillon ».
 - Avis d'arrivée : réceptions à valider regroupées par client (« Valider et prévenir »), puis avis récents avec leur état ; « Réessayer » pour un Telegram non remis (`deliverMessage(…, {retryConfirmed: true})`), texte à copier pour un e-mail à envoyer.
 - Référence visuelle : les maquettes « Réception » et « Avis d'arrivée » du canevas de conception.
@@ -232,3 +238,11 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 - **Étapes ajoutées.** « Le client a répondu » (lire la réponse, jamais relancer), « Demande à vérifier » (demande non remise ou bloquée plus de 10 minutes), « Devis à compléter » (ce qui manque pour calculer), « Envoi à vérifier » pour un avis bloqué. Les actions portent les droits qu'elles exigent ; « X s'en occupe » quand un collègue tient la tâche. Un dossier payé se lit « Payé ».
 - **Textes de l'avis.** Aucune promesse sur l'état des colis, factures d'achat au pluriel, lien de dépôt dans l'e-mail, nombres à la française.
 - **Restent ouverts.** Branchement d'un fournisseur d'e-mail (les avis par e-mail restent « À envoyer », texte à copier) ; taille globale des petits textes de l'application (l'ordre de chargement des styles ramène `.text-sm` à 14 px hors des nouveaux écrans) ; produits interdits enregistrés par dossier et non par carton.
+
+## Changements du 29 octobre (retours de l'équipe sur expedile.app)
+
+- **Plusieurs cartons, une validation.** « Le carton » et « Validation » ne font plus qu'un écran, « Cartons » : on ajoute les cartons l'un après l'autre (le formulaire se vide après chaque carton), ils s'affichent dessous, puis « Valider N cartons et prévenir [prénom] » envoie un seul avis. La réception passe de quatre à trois étapes (Client, Cartons, Rangement).
+- **Messages lisibles.** L'erreur « Could not find the function public.list_pending_receptions… » (migration pas encore en production au moment de la capture) ne peut plus s'afficher telle quelle : phrase en français et « Réessayer ».
+- **Colis : tri par destination**, **recherche par numéro de colis** (numéro de suivi d'un carton, référence du dossier) **et par numéro d'expédition** (référence du départ, numéro du transporteur), **dimensions** de chaque carton dans le tableau.
+- **Page qui glissait.** Les textes masqués des écrans Colis et Réception (annonces pour lecteurs d'écran, légendes de tableau) ne rallongent plus la page entière : une mise au point ne fait plus remonter le menu.
+- **Comparaison avec l'outil actuel (SunApps), à arbitrer** : la réception de SunApps ne demande que le numéro de suivi (les mesures sont prises une fois, pour le colis expédié) ; ici, chaque carton a ses quatre mesures. Restent absents d'expedile.app : la zone NORD/SUD/OUEST dans la liste Colis (la table existe), le n° client et le forfait dans la liste, les SMS, un export TMS.

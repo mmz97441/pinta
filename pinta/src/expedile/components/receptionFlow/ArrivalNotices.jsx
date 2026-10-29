@@ -8,7 +8,7 @@ import { arrivalNoticeState, arrivalNoticeSummary, pendingByClient } from '../..
 import { arrivalChannel } from '../../services/arrivalNotice';
 import { Note, SkeletonRows, TableFrame } from './ReceptionParts';
 import { NoticeActions, NoticePill } from './NoticeStatus';
-import { count, parisMoment } from './receptionFlowModel';
+import { count, parisMoment, readableError } from './receptionFlowModel';
 import './receptionFlow.css';
 
 // « Avis d’arrivée » (/avis), two tables at every width: the receptions still to validate, by client (« Valider et
@@ -87,9 +87,9 @@ export default function ArrivalNotices() {
     setRefreshing(true);
     const [pendingRead, noticesRead] = await Promise.allSettled([fetchPendingReceptions(), fetchArrivalNotices({ limit: 100 })]);
     if (pendingRead.status === 'fulfilled') { setPending(pendingRead.value); setPendingError(''); }
-    else setPendingError(pendingRead.reason?.message || 'Les réceptions à valider n’ont pas pu être lues.');
+    else setPendingError(readableError(pendingRead.reason, 'Les réceptions à valider n’ont pas pu être lues. Vérifiez la connexion, puis touchez « Réessayer ».', 'Avis · réceptions à valider'));
     if (noticesRead.status === 'fulfilled') { setNotices(noticesRead.value); setNoticesError(''); }
-    else setNoticesError(noticesRead.reason?.message || 'Les avis d’arrivée n’ont pas pu être lus.');
+    else setNoticesError(readableError(noticesRead.reason, 'Les avis d’arrivée n’ont pas pu être lus. Vérifiez la connexion, puis touchez « Réessayer ».', 'Avis · avis d’arrivée'));
     setNow(Date.now());
     setRefreshing(false);
   }, []);

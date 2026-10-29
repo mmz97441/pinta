@@ -8,9 +8,9 @@ import { colisStage } from '../../domain/brouillon';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { CONVERSATION_PERMISSIONS, FlaggedCartons, Note, SkeletonRows } from './ReceptionParts';
 import { NoticeCard } from './NoticeStatus';
-import { count, firstName } from './receptionFlowModel';
+import { count, firstName, readableError } from './receptionFlowModel';
 
-// Step 4, « Rangement »: the locker in very large, the cartons of the brouillon, the state of the arrival notice and,
+// Step 3, « Rangement »: the locker in very large, the cartons of the brouillon, the state of the arrival notice and,
 // when the client had already agreed (or been asked), the reminder that the agreement is to be asked again.
 
 function consentReminder(kind, name, before, added, stageLabel) {
@@ -46,7 +46,7 @@ export default function RangementStep({ client, session, update, validationId, o
         update(previous => previous.done?.validationId === validationId ? { done: { ...previous.done, notice: found } } : {});
       } else setLoadError('Cette réception validée n’apparaît pas parmi les derniers avis du client. Retrouvez-la dans « Avis d’arrivée ».');
     } catch (error) {
-      if (mounted.current) setLoadError(error.message || 'L’état de l’avis n’a pas pu être lu.');
+      if (mounted.current) setLoadError(readableError(error, 'L’état de l’avis n’a pas pu être lu. Vérifiez la connexion, puis touchez « Réessayer ».', 'Réception · avis'));
     } finally { if (mounted.current) setLoading(false); }
   }, [client.id, validationId, update]);
   useEffect(() => { refresh(); }, [refresh]);
