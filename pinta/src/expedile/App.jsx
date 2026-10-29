@@ -676,8 +676,9 @@ function AppContent() {
         <div className="flex-1 flex flex-col min-w-0 bg-gray-50">
           <div data-toast-ceiling="" className="lg:hidden min-h-12 px-4 flex items-center justify-between border-b border-gray-200">
             <span className="font-black brand-t">EXPÉD<span className="brand-t-gold">ÎLE</span></span>
-            {/* The logout lives in « Plus », away from the theme toggle. */}
-            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate('/recevoir')} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} className="shrink-0" />Recevoir</button>}<ThemeToggle compact /></div>
+            {/* The logout lives in « Plus », away from the theme toggle. « Réceptionner des cartons », the action's name in the
+                sidebar and on its page; « Réceptionner » alone where the phone is too narrow for it on one line. */}
+            <div className="flex items-center gap-2">{can('perm_colis_receptionner') && <button aria-label="Réceptionner des cartons" onClick={() => navigate('/recevoir')} className="min-h-11 inline-flex items-center gap-1 whitespace-nowrap rounded-xl px-2 text-xs font-bold brand-t"><Plus size={18} aria-hidden="true" className="shrink-0" />Réceptionner<span className="hidden min-[375px]:inline"> des cartons</span></button>}<ThemeToggle compact /></div>
           </div>
           {loadBanner}
           {/* The one <main> of every staff page: the pages render their content without their own.
