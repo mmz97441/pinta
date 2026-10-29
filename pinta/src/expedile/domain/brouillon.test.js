@@ -491,11 +491,13 @@ test('a task held by a colleague: the step says who, from the team’s tasks; wi
 // ── Rows ─────────────────────────────────────────────────────────────────────
 test('a row gives the client, the cartons received, the step, the total and the departure ready to show', () => {
   const row = colisRow({ ...measured, devisTransport: 70, devisOM: 10 }, ctx());
-  assert.deepEqual(Object.keys(row).sort(), ['action', 'cartons', 'cartonsLabel', 'casier', 'casierLabel', 'clientId', 'clientKnown', 'clientName', 'clientType', 'clientTypeLabel', 'commune',
-    'departure', 'destinationCode', 'destinationLabel', 'dimensions', 'ficheHref', 'id', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchCodes', 'searchText',
-    'stage', 'statut', 'tab', 'total', 'volume', 'volumeLabel'].sort());
+  assert.deepEqual(Object.keys(row).sort(), ['action', 'cartons', 'cartonsLabel', 'casier', 'casierLabel', 'clientId', 'clientKnown', 'clientName', 'clientRef', 'clientType', 'clientTypeLabel', 'commune',
+    'departure', 'destinationCode', 'destinationLabel', 'dimensions', 'ficheHref', 'forfait', 'forfaitLabel', 'id', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchCodes', 'searchText',
+    'stage', 'statut', 'tab', 'total', 'volume', 'volumeLabel', 'zone', 'zoneLabel'].sort());
   assert.deepEqual([row.id, row.ref, row.statut, row.tab, row.clientId, row.clientName, row.clientType, row.clientTypeLabel, row.destinationCode, row.destinationLabel, row.commune],
     ['d-1', 'EXP-AAA111', 'mesure', 'brouillon', 'c-flavie', 'PAYET Flavie', 'particulier', 'Particulier', '974', 'Réunion', 'Sainte-Clotilde']);
+  // The delivery zone of La Réunion (97400: Nord); no client number nor plan on this client.
+  assert.deepEqual([row.zone, row.zoneLabel, row.clientRef, row.forfait, row.forfaitLabel], ['NORD', 'Nord', null, null, null]);
   assert.deepEqual([row.cartons, row.cartonsLabel, row.pendingCartons, row.casier, row.casierLabel, row.poids, row.poidsLabel, row.volumeLabel],
     [2, '2 cartons', 0, 'B12', 'Casier B12', 3.75, kg(3.75), '0,030\u00a0m³']);
   assert.ok(Math.abs(row.volume - 0.03) < 1e-12, 'L × l × H / 1 000 000, the cartons added up.');
@@ -712,6 +714,28 @@ test('« Par date d’envoi » groups by departure, soonest first, then « Dépa
   assert.deepEqual(sortColisRows([rows[6], rows[5]], 'depart', { now }).map(row => row.id), ['d-soon-b', 'd-soon-a'], 'Whatever the incoming order.');
 });
 
+test('a row names the client number, the plan and the zone of La Réunion, and the search finds them', () => {
+  const people = new Map([
+    ['c-quentin', { id: 'c-quentin', ref: 'CLT174737', nom: 'QUENTIN Auguste', nomFamille: 'QUENTIN', prenom: 'Auguste', type: 'particulier', cp: '97410', ville: 'Saint-Pierre', abonnement: 'premium_annuel' }],
+    ['c-old', { id: 'c-old', ref: 'CLT104122', nom: 'NICE Guillaume', nomFamille: 'NICE', prenom: 'Guillaume', type: 'particulier', cp: '97438', ville: 'Sainte-Marie', abonnement: 'premium' }],
+    ['c-vip', { id: 'c-vip', ref: 'CLT154068', nom: 'COURTOIS Béatrice', nomFamille: 'COURTOIS', prenom: 'Béatrice', type: 'particulier', cp: '97460', ville: 'Saint-Paul', abonnement: 'vip' }],
+    ['c-may', { id: 'c-may', ref: 'CLT302755', nom: 'MOGALIA Carole', nomFamille: 'MOGALIA', prenom: 'Carole', type: 'particulier', cp: '97600', ville: 'Mamoudzou', abonnement: 'freemium' }],
+    ['c-odd', { id: 'c-odd', nom: 'DALLEAU Guyvan', nomFamille: 'DALLEAU', prenom: 'Guyvan', type: 'particulier', cp: '97499', ville: 'Ailleurs', abonnement: 'inconnu' }],
+  ]);
+  const at = (id, clientId) => colisRow({ ...measured, id, clientId }, ctx({ getClient: key => people.get(key) || null }));
+  const rows = [at('d-q', 'c-quentin'), at('d-n', 'c-old'), at('d-v', 'c-vip'), at('d-m', 'c-may'), at('d-d', 'c-odd')];
+  assert.deepEqual(rows.map(row => [row.clientRef, row.forfaitLabel, row.zone, row.zoneLabel]), [
+    ['CLT174737', 'Premium Annuel', 'SUD', 'Sud'],
+    ['CLT104122', 'Premium', 'NORD', 'Nord'],
+    ['CLT154068', 'VIP Annuel', 'OUEST', 'Ouest'],
+    ['CLT302755', 'Freemium', null, null],
+    [null, null, null, null],
+  ], 'Mayotte has no zone; an unknown postcode or plan is not guessed.');
+  assert.deepEqual(filterColisRows(rows, 'CLT174737').map(row => row.id), ['d-q'], 'The client number.');
+  assert.deepEqual(filterColisRows(rows, 'sud').map(row => row.id), ['d-q'], 'The zone.');
+  assert.deepEqual(filterColisRows(rows, 'vip').map(row => row.id), ['d-v'], 'The plan.');
+});
+
 test('« Par destination » groups by destination, Réunion, Mayotte, Guadeloupe, Martinique, then the unknown ones, by name inside', () => {
   const lea = { id: 'c-lea', nom: 'BOURGEOIS Léa', nomFamille: 'BOURGEOIS', prenom: 'Léa', type: 'particulier', cp: '97110', ville: 'Pointe-à-Pitre' };
   const noPostcode = { id: 'c-nocp', nom: 'ADAM Marc', nomFamille: 'ADAM', prenom: 'Marc', type: 'particulier', cp: '', ville: '' };
@@ -728,18 +752,25 @@ test('« Par destination » groups by destination, Réunion, Mayotte, Guadeloupe
     at({ ...measured, id: 'd-ebrard', clientId: zoe.id }),
   ];
   const groups = groupColisRowsByDestination(rows);
-  assert.deepEqual(groups.map(group => [group.key, group.code, group.label, group.rows.map(row => row.id)]), [
-    ['destination:974', '974', 'Réunion', ['d-durand', 'd-ebrard', 'd-payet']],
-    ['destination:976', '976', 'Mayotte', ['d-hoarau']],
-    ['destination:971', '971', 'Guadeloupe', ['d-lea']],
-    [NO_DESTINATION_GROUP_KEY, null, 'Destination à vérifier', ['d-adam', 'd-martin']],
+  // La Réunion by delivery zone: Nord (97400) before Sud (97410).
+  assert.deepEqual(groups.map(group => [group.key, group.code, group.zone, group.label, group.rows.map(row => row.id)]), [
+    ['destination:974:NORD', '974', 'NORD', 'Réunion · Nord', ['d-durand', 'd-payet']],
+    ['destination:974:SUD', '974', 'SUD', 'Réunion · Sud', ['d-ebrard']],
+    ['destination:976', '976', null, 'Mayotte', ['d-hoarau']],
+    ['destination:971', '971', null, 'Guadeloupe', ['d-lea']],
+    [NO_DESTINATION_GROUP_KEY, null, null, 'Destination à vérifier', ['d-adam', 'd-martin']],
   ]);
-  const [reunion] = groups;
-  assert.deepEqual([reunion.totals.clients, reunion.totals.dossiers, reunion.totals.labels.clients], [3, 3, '3 clients']);
-  assert.equal(groups[1].totals.montantConnu, 95.06, 'The known amount of the group, with the right to see it.');
+  const [nord] = groups;
+  assert.deepEqual([nord.totals.clients, nord.totals.dossiers, nord.totals.labels.clients], [2, 2, '2 clients']);
+  assert.equal(groups[2].totals.montantConnu, 95.06, 'The known amount of the group, with the right to see it.');
   // The same order as a flat list, whatever the incoming order; the list given is not reordered.
-  assert.deepEqual(sortColisRows(rows, 'destination').map(row => row.id), ['d-durand', 'd-ebrard', 'd-payet', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
-  assert.deepEqual(sortColisRows([...rows].reverse(), 'destination').map(row => row.id), ['d-durand', 'd-ebrard', 'd-payet', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
+  assert.deepEqual(sortColisRows(rows, 'destination').map(row => row.id), ['d-durand', 'd-payet', 'd-ebrard', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
+  assert.deepEqual(sortColisRows([...rows].reverse(), 'destination').map(row => row.id), ['d-durand', 'd-payet', 'd-ebrard', 'd-hoarau', 'd-lea', 'd-adam', 'd-martin']);
+  // A postcode of La Réunion without zone: « Réunion », after its zones.
+  const unzoned = at({ ...measured, id: 'd-unzoned', clientId: 'c-unzoned' });
+  assert.equal(unzoned.zone, null);
+  assert.deepEqual(groupColisRowsByDestination([rows[6], { ...unzoned, destinationCode: '974' }]).map(group => [group.key, group.label]),
+    [['destination:974:SUD', 'Réunion · Sud'], ['destination:974', 'Réunion']]);
   assert.equal(rows[0].id, 'd-payet');
   assert.deepEqual(groupColisRowsByDestination([]), []);
 });
@@ -932,7 +963,7 @@ test('a validation files its notice on a dossier that still requests its purchas
 test('the sheet: header, cartons received with those to validate, one action and the links', () => {
   const sheet = brouillonFiche(measured, ctx({ pending: pendingByColis([pendingEntry('d-1', [2])]) }));
   assert.deepEqual(sheet.header, { ref: 'EXP-AAA111', clientName: 'PAYET Flavie', clientTypeLabel: 'Particulier', destinationLabel: 'Réunion', commune: 'Sainte-Clotilde',
-    casier: 'B12', casierLabel: 'Casier B12', stage: sheet.stage });
+    zone: 'NORD', zoneLabel: 'Nord', clientRef: null, forfaitLabel: null, casier: 'B12', casierLabel: 'Casier B12', stage: sheet.stage });
   assert.equal(sheet.stage.key, 'reception_a_valider');
   assert.deepEqual(sheet.action, { key: 'valider_reception', label: 'Valider la réception', task: null, ...RECEIVE, href: '/recevoir?client=c-flavie&valider=1' });
   assert.deepEqual(sheet.received.cartons.map(carton => [carton.number, carton.supplierLabel, carton.trackingLabel, carton.dimensionsLabel, carton.poidsLabel, carton.volumeLabel, carton.receivedLabel, carton.pending]), [

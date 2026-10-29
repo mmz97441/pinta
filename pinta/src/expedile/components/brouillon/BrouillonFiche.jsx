@@ -15,7 +15,7 @@ import ColisAction from './ColisAction';
 import ConsentSheet from './ConsentSheet';
 import ArrivalNoticeBlock from './ArrivalNoticeBlock';
 import ScrollFrame from './ScrollFrame';
-import StagePill from './StagePill';
+import StagePill, { ClientMeta, ZoneTag } from './StagePill';
 import { dossierHref as wholeDossierHref, withReturnTo } from './colisLinks';
 import useConsentSheet from './useConsentSheet';
 import useReceptionSignals from './useReceptionSignals';
@@ -269,10 +269,12 @@ export default function BrouillonFiche() {
     <header className="grid gap-2">
       <h1 className="fiche-title">{header.clientName}</h1>
       <p className="m-0 text-[15px] colis-muted">
-        {[header.destinationLabel, header.commune, header.clientTypeLabel].filter(Boolean).join(' · ')}
+        {[header.destinationLabel, header.commune].filter(Boolean).join(' · ')}{header.zone && <> <ZoneTag zone={header.zone} label={header.zoneLabel} /></>}
+        {header.clientTypeLabel && <>{' · '}{header.clientTypeLabel}</>}
         {' · '}{header.casier ? <>Casier <span className="colis-code" style={{ color: 'var(--colis-text)' }}>{header.casier}</span></> : header.casierLabel}
         {header.ref && <>{' · '}<span className="keep-token">{header.ref}</span></>}
       </p>
+      <ClientMeta clientRef={header.clientRef} forfaitLabel={header.forfaitLabel} className="m-0 block text-[15px] colis-muted" />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <StagePill stage={header.stage} />
         {header.stage.detail && <span className="text-[15px] colis-muted">{header.stage.detail}</span>}

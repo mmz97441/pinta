@@ -360,3 +360,15 @@ html.dark .fiche-saving { background: #153d2c; color: #b9e8ca; }
 /* The containing block of what is positioned inside (captions and announcements, .sr-only): kept within the scrolling
    <main>, they never make the whole page taller, which a focus would then scroll (the menu sliding up). */
 .colis-page:not(.colis-sheet-layer) { position: relative; }
+
+/* The delivery zone of La Réunion: one colour per zone (6:1 or more in both themes), the word always written. */
+.colis-zone { display: inline-block; padding: 0 8px; border-radius: 999px; font-size: 15px; font-weight: 800; line-height: 1.45;
+  letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; vertical-align: baseline; background: var(--zone-bg); color: var(--zone-text); }
+.colis-zone[data-zone='NORD'] { --zone-bg: #dbeafe; --zone-text: #1d4ed8; }
+.colis-zone[data-zone='EST'] { --zone-bg: #d1fae5; --zone-text: #065f46; }
+.colis-zone[data-zone='OUEST'] { --zone-bg: #fef3c7; --zone-text: #92400e; }
+.colis-zone[data-zone='SUD'] { --zone-bg: #fce7f3; --zone-text: #9d174d; }
+html.dark .colis-zone[data-zone='NORD'] { --zone-bg: #1e3a5f; --zone-text: #bfdbfe; }
+html.dark .colis-zone[data-zone='EST'] { --zone-bg: #134e3a; --zone-text: #a7f3d0; }
+html.dark .colis-zone[data-zone='OUEST'] { --zone-bg: #4a3410; --zone-text: #fde68a; }
+html.dark .colis-zone[data-zone='SUD'] { --zone-bg: #4c1d33; --zone-text: #fbcfe8; }

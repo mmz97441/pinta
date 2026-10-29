@@ -502,7 +502,8 @@ async function main() {
         assert.deepEqual(fit, { buttons: true, group: true, page: true }, `${width}`);
         if (width >= 1024) assert.equal(await f.page.locator('aside.staff-sidebar, .staff-sidebar').first().isVisible(), true, `${width}: with the sidebar`);
       }
-      // One group per destination, in the order Réunion, Mayotte, then the destinations to check; by name inside.
+      // One group per destination, in the order Réunion (by delivery zone: Nord, Est, Ouest, Sud), Mayotte, then the
+      // destinations to check; by name inside.
       await f.page.setViewportSize({ width: 1440, height: 900 });
       await openHome(f);
       const sorts = f.page.getByRole('group', { name: 'Classer', exact: true });
@@ -510,14 +511,17 @@ async function main() {
       await f.page.waitForURL(url => url.searchParams.get('classer') === 'destination');
       await sorts.locator('button[aria-pressed="true"]', { hasText: 'Par destination' }).waitFor();
       await f.page.getByRole('table', { name: 'Brouillon, classé par destination', exact: true }).waitFor();
-      await f.page.locator('.colis-group-row').nth(2).waitFor();
+      await f.page.locator('.colis-group-row').nth(5).waitFor();
       const groups = await f.page.locator('.colis-group-row').evaluateAll(rows => rows.map(row => row.innerText.replace(/\s+/g, ' ').trim()));
-      assert.equal(groups.length, 3, groups.join('\n'));
-      assert.match(groups[0], /^Réunion 6 clients · 18 cartons · [\d,]+ kg · [\d,]+ m³ · 229,50 € \(2 prix connus sur 6\)$/);
-      assert.match(groups[1], /^Mayotte 1 client · 1 carton · 2,1 kg · 0,012 m³ · prix à calculer$/);
-      assert.match(groups[2], /^Destination à vérifier 1 client · 1 carton · 1,5 kg · 0,006 m³ · prix à calculer$/);
+      assert.equal(groups.length, 6, groups.join('\n'));
+      assert.match(groups[0], /^Réunion · Nord 1 client · \d+ cartons? · /);
+      assert.match(groups[1], /^Réunion · Est 1 client · 5 cartons · /);
+      assert.match(groups[2], /^Réunion · Ouest 1 client · \d+ cartons? · /);
+      assert.match(groups[3], /^Réunion · Sud 3 clients · \d+ cartons · /);
+      assert.match(groups[4], /^Mayotte 1 client · 1 carton · 2,1 kg · 0,012 m³ · prix à calculer$/);
+      assert.match(groups[5], /^Destination à vérifier 1 client · 1 carton · 1,5 kg · 0,006 m³ · prix à calculer$/);
       assert.equal(await f.page.locator('.colis-group-row[data-none="true"]').count(), 1, 'The destinations to check in the colour of what is to check.');
-      await waitForOrder(f, ['Boyer Sandrine', 'Grondin Jean', 'Hoarau Jean-Marc', 'Payet Flavie', 'Rivière Marie-Claude', 'Técher Johnny', 'Abdallah Mohamed', 'Leroy Nina']);
+      await waitForOrder(f, ['Hoarau Jean-Marc', 'Rivière Marie-Claude', 'Grondin Jean', 'Boyer Sandrine', 'Payet Flavie', 'Técher Johnny', 'Abdallah Mohamed', 'Leroy Nina']);
       await assertReadable(f, 'by destination');
       await assertAccessible(f, 'by destination');
       await shot(f, 'colis-bureau-par-destination');
@@ -533,7 +537,7 @@ async function main() {
       const menu = f.page.getByLabel('Classer', { exact: true });
       assert.deepEqual(await menu.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
       assert.equal(await menu.inputValue(), 'destination');
-      assert.equal(await f.page.locator('.colis-group-row').count(), 3);
+      assert.equal(await f.page.locator('.colis-group-row').count(), 6);
       assert.equal((await tableFrame(f, 'colis-liste')).pageOverflow, false);
       await assertReadable(f, 'by destination on a phone');
       await shot(f, 'colis-telephone-par-destination');
@@ -636,6 +640,44 @@ async function main() {
       noSend(f);
     }, { prepare: f => {
       f.tables.envois.find(row => row.id === E.past).tracking_principal = '235-1234 5675';
+    } });
+
+    // As in SunApps: the delivery zone of La Réunion, the client number and the plan, on the line and on the sheet,
+    // found by the search; light and dark, computer and phone.
+    await scenario('zone-client-number-and-plan', async f => {
+      for (const [width, height, theme] of [[1440, 900, 'light'], [390, 844, 'dark']]) {
+        await f.page.setViewportSize({ width, height });
+        await openHome(f, '?classer=nom');
+        await setTheme(f, theme);
+        await openHome(f, '?classer=nom');
+        const name = rowOf(f, D.riviere).locator('th');
+        assert.match(await flat(name), /^Rivière Marie-Claude RÉUNION, ZONE EST Saint-Benoît Numéro client CLT319437 · Forfait Premium Annuel$/, `${width}`);
+        // The zone and its place on one line where the column allows it (a computer); the tag never breaks.
+        if (width >= 1024) assert.equal(await name.locator('.colis-sub').first().evaluate(line => line.getBoundingClientRect().height < 30), true, `${width}`);
+        assert.equal(await name.locator('.colis-zone').evaluate(tag => tag.getClientRects().length), 1, `${width}`);
+        for (const [key, zone] of [['riviere', 'EST'], ['hoarau', 'NORD'], ['grondin', 'OUEST'], ['payet', 'SUD']])
+          assert.equal(await rowOf(f, D[key]).locator('.colis-zone').getAttribute('data-zone'), zone, key);
+        assert.equal(await rowOf(f, D.abdallah).locator('.colis-zone').count(), 0, 'Mayotte has no zone');
+        await assertReadable(f, `zone ${width} ${theme}`);
+        await assertAccessible(f, `zone ${width} ${theme}`);
+        await shot(f, `colis-zone-${width}-${theme}`, false);
+      }
+      const search = f.page.getByLabel(SEARCH_LABEL, { exact: true });
+      await search.fill('CLT319437');
+      await waitForOrder(f, ['Rivière Marie-Claude']);
+      await search.fill('sud');
+      await waitForOrder(f, ['Boyer Sandrine', 'Payet Flavie', 'Técher Johnny']);
+      await search.fill('premium');
+      await waitForOrder(f, ['Rivière Marie-Claude']);
+      // The sheet says the same.
+      await f.page.goto(`${base}/brouillon/${D.riviere}`);
+      const sheet = f.page.getByTestId('brouillon-fiche');
+      await sheet.locator('header').waitFor();
+      assert.match(await flat(sheet.locator('header')), /Réunion · Saint-Benoît ZONE EST · Particulier · Casier C-03 · EXP-TEST-106 Numéro client CLT319437 · Forfait Premium Annuel/);
+      await assertAccessible(f, 'zone on the sheet');
+      noSend(f);
+    }, { prepare: f => {
+      Object.assign(f.tables.clients.find(row => row.id === CLIENT.riviere), { ref: 'CLT319437', abonnement: 'premium_annuel' });
     } });
 
     await scenario('row-actions-open-their-page', async f => {
@@ -846,7 +888,7 @@ async function main() {
         assert.deepEqual(await sort.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
         const table = f.page.getByRole('table', { name: 'Brouillon, classé par nom', exact: true });
         assert.deepEqual((await table.locator('thead th').allInnerTexts()).map(text => text.trim().toLowerCase()), ['client', 'colis', 'où en est-on', 'total à payer', 'action']);
-        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou 1 carton · casier D-04 2,1 kg · 0,012 m³ 30 × 20 × 20 cm Accord à demander Jamais demandé À calculer Demander l’accord$/);
+        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou Numéro client CLI-ABDALLAH · Forfait Freemium 1 carton · casier D-04 2,1 kg · 0,012 m³ 30 × 20 × 20 cm Accord à demander Jamais demandé À calculer Demander l’accord$/);
         // The client's name opens the sheet.
         assert.equal(await rowOf(f, D.payet).getByRole('link', { name: 'Payet Flavie', exact: true }).getAttribute('href'), `/brouillon/${D.payet}?returnTo=%2F`);
         // The table scrolls in its frame; the page never does. Its right edge is shaded while columns hide there.
@@ -942,7 +984,7 @@ async function main() {
         await f.page.getByTestId('fiche-avis').getByText('À envoyer', { exact: true }).waitFor();
         assert.ok(f.tables.signal_calls.some(call => call.rpc === 'list_arrival_notices' && call.input.p_colis_id === D.riviere && call.input.p_limit === 50));
         assert.ok(f.tables.signal_calls.some(call => call.rpc === 'list_pending_receptions' && call.input.p_client_id === CLIENT.riviere));
-        assert.match(await flat(sheet.locator('header')), /Réunion · Saint-Benoît · Particulier · Casier C-03 · EXP-TEST-106 Prêt pour le devis/);
+        assert.match(await flat(sheet.locator('header')), /Réunion · Saint-Benoît ZONE EST · Particulier · Casier C-03 · EXP-TEST-106 Numéro client CLI-RIVIÈRE · Forfait Freemium Prêt pour le devis/);
         // The price of the saved quote: transport and its billed weight, the import taxes and their detail, the total, the saving.
         const action = f.page.getByTestId('fiche-action');
         await action.getByRole('heading', { name: 'Prix à payer', exact: true }).waitFor();

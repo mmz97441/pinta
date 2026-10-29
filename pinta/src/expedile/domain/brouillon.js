@@ -1,4 +1,4 @@
-import { DESTINATIONS, STATUTS } from '../constants/index.js';
+import { ABONNEMENTS, DESTINATIONS, STATUTS, getSecteurByCP } from '../constants/index.js';
 import { RECEPTION_APPEND_STATUSES, RECEPTION_MEASURES, hasCompleteReceptionMeasurements, receptionAppendBlockReason, receptionAppendImpact, receptionCartonManifest, receptionDateSummary } from './reception.js';
 import { PAYMENT_DETAIL_LABELS, PAYMENT_STATE_LABELS, TABLE_COLUMNS, TAXES_PRO_LABEL, buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
 import { statusTone } from './dossierTableTone.js';
@@ -636,6 +636,23 @@ export function colisStage(dossier, ctx = {}) {
 const UNKNOWN_CLIENT = 'Client non renseigné';
 const clientTypeLabel = client => !client ? null : client.type === 'pro' ? 'Professionnel' : client.type === 'particulier' ? 'Particulier' : 'Type à préciser';
 
+/** The delivery zones of La Réunion (getSecteurByCP, from the postcode), in the order of « Par destination ». */
+export const ZONES = Object.freeze({ NORD: 'Nord', EST: 'Est', OUEST: 'Ouest', SUD: 'Sud' });
+const ZONE_ORDER = Object.keys(ZONES);
+/** The zone of a client delivered in La Réunion (« NORD »…), null elsewhere or for a postcode the table does not know. */
+function zoneOf(client, destinationCode) {
+  if (destinationCode !== '974') return null;
+  const zone = getSecteurByCP(client?.cp);
+  return Object.prototype.hasOwnProperty.call(ZONES, zone) ? zone : null;
+}
+/** « Freemium », « Premium Annuel », « VIP Annuel » (ABONNEMENTS), « Premium » for the historical offer; null without one. */
+function forfaitLabel(client) {
+  const key = text(client?.abonnement);
+  if (!key) return null;
+  if (Object.prototype.hasOwnProperty.call(ABONNEMENTS, key)) return ABONNEMENTS[key].label;
+  return key === 'premium' ? 'Premium' : null;
+}
+
 /** The received cartons as the dossier records them (receptionCartonManifest: a former single carton without
  * per-carton measures keeps its own; several cartons are never split from a total), with their arrival dates. */
 function receivedCartons(dossier, now, pending) {
@@ -746,11 +763,15 @@ function rowOf(f) {
   const searchCodes = searchCodesOf(dossier, cartons, departure);
   const codes = searchCodes.map(code => code.value);
   const casier = text(dossier.casier) || null;
+  const zone = zoneOf(client, code);
+  const forfait = forfaitLabel(client);
   return {
     id: dossier.id, ref: dossier.ref || null, statut: dossier.statut, tab: f.tab,
     clientId: dossier.clientId || null, clientName: known || UNKNOWN_CLIENT, clientKnown: Boolean(known),
+    clientRef: text(client?.ref) || null, forfait: text(client?.abonnement) || null, forfaitLabel: forfait,
     clientType: client?.type || null, clientTypeLabel: clientTypeLabel(client),
     destinationCode: code || null, destinationLabel: DESTINATIONS[code]?.label || 'Destination à préciser',
+    zone, zoneLabel: zone ? ZONES[zone] : null,
     commune: text(client?.commune) || text(client?.ville) || null,
     cartons: cartons.length, cartonsLabel: countLabel(cartons.length, 'carton', 'cartons'), pendingCartons: f.pending?.cartonCount || 0,
     casier, casierLabel: casier ? `Casier ${casier}` : 'Casier à renseigner',
@@ -762,13 +783,14 @@ function rowOf(f) {
     departure,
     ficheHref: dossier.id ? `/brouillon/${encodeURIComponent(dossier.id)}` : null,
     searchCodes,
-    searchText: [clientSearchText(client), known, casier, ...codes, ...codes.map(compactCode).filter(code => !codes.includes(code))].filter(Boolean).join(' '),
+    searchText: [clientSearchText(client), known, casier, zone ? ZONES[zone] : null, forfait, ...codes, ...codes.map(compactCode).filter(code => !codes.includes(code))].filter(Boolean).join(' '),
   };
 }
 
 /**
- * One row of « Colis »: `id, ref, statut, tab, clientId, clientName, clientKnown, clientType, clientTypeLabel,
- * destinationCode, destinationLabel, commune, cartons, cartonsLabel, pendingCartons, casier, casierLabel, poids,
+ * One row of « Colis »: `id, ref, statut, tab, clientId, clientName, clientKnown, clientRef (« CLT… »), forfait,
+ * forfaitLabel (« Premium Annuel »), clientType, clientTypeLabel, destinationCode, destinationLabel, zone (« SUD », La
+ * Réunion only), zoneLabel (« Sud »), commune, cartons, cartonsLabel, pendingCartons, casier, casierLabel, poids,
  * poidsLabel, volume, volumeLabel, dimensions, lastReceivedAt, lastReceivedLabel, stage, action, total, departure,
  * ficheHref, searchCodes, searchText`. `poids`/`volume`: the received cartons, null unless every carton is measured.
  * `dimensions` = `{ prepared, lines, shown, moreLabel, label }`: the parcels to ship once prepared, otherwise the
@@ -908,7 +930,8 @@ const DESTINATION_ORDER = ['974', '976', '971', '972'];
 /**
  * « Par destination »: one group per destination of the rows (`destinationCode`: the client's postcode, the paid
  * quote's destination once paid), in the order of DESTINATIONS (Réunion, Mayotte, Guadeloupe, Martinique), then
- * « Destination à vérifier » for a destination unknown. Each group: `{ key, code, label, rows, totals }`
+ * « Destination à vérifier » for a destination unknown; La Réunion by delivery zone (« Réunion · Nord », Est, Ouest,
+ * Sud, then « Réunion » for a postcode without zone). Each group: `{ key, code, zone, label, rows, totals }`
  * (colisTotals), its rows by the client's name (« Par nom »).
  */
 export function groupColisRowsByDestination(rows = []) {
@@ -916,11 +939,12 @@ export function groupColisRowsByDestination(rows = []) {
   const groups = new Map();
   for (const row of sortColisRows(rows, 'nom')) {
     const code = Object.prototype.hasOwnProperty.call(DESTINATIONS, row.destinationCode) ? row.destinationCode : null;
-    const key = code ? `destination:${code}` : NO_DESTINATION_GROUP_KEY;
-    if (!groups.has(key)) groups.set(key, { key, code, label: code ? DESTINATIONS[code].label : UNKNOWN_DESTINATION_LABEL, rows: [] });
+    const zone = code === '974' && Object.prototype.hasOwnProperty.call(ZONES, row.zone) ? row.zone : null;
+    const key = code ? `destination:${code}${zone ? `:${zone}` : ''}` : NO_DESTINATION_GROUP_KEY;
+    if (!groups.has(key)) groups.set(key, { key, code, zone, label: code ? `${DESTINATIONS[code].label}${zone ? ` · ${ZONES[zone]}` : ''}` : UNKNOWN_DESTINATION_LABEL, rows: [] });
     groups.get(key).rows.push(row);
   }
-  const rank = group => group.code ? order.indexOf(group.code) : order.length;
+  const rank = group => (group.code ? order.indexOf(group.code) : order.length) * (ZONE_ORDER.length + 1) + (group.zone ? ZONE_ORDER.indexOf(group.zone) : ZONE_ORDER.length);
   return [...groups.values()].sort((left, right) => rank(left) - rank(right)).map(group => ({ ...group, totals: colisTotals(group.rows) }));
 }
 
@@ -1240,6 +1264,7 @@ export function brouillonFiche(dossier, ctx = {}) {
   return {
     id: source.id || null, ref: source.ref || null,
     header: { ref: row.ref, clientName: row.clientName, clientTypeLabel: row.clientTypeLabel, destinationLabel: row.destinationLabel, commune: row.commune,
+      zone: row.zone, zoneLabel: row.zoneLabel, clientRef: row.clientRef, forfaitLabel: row.forfaitLabel,
       casier: row.casier, casierLabel: row.casierLabel, stage: row.stage },
     stage: row.stage,
     action: row.action ? { ...row.action, href: colisActionHref(row, id ? `/brouillon/${id}` : '/') } : null,

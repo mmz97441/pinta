@@ -16,7 +16,7 @@ import WorkLoadError from '../workspace/WorkLoadError';
 import ColisAction from './ColisAction';
 import ConsentSheet from './ConsentSheet';
 import ScrollFrame from './ScrollFrame';
-import StagePill, { totalsParts } from './StagePill';
+import StagePill, { ClientMeta, ZoneTag, totalsParts } from './StagePill';
 import { withReturnTo } from './colisLinks';
 import useConsentSheet from './useConsentSheet';
 import useReceptionSignals from './useReceptionSignals';
@@ -93,7 +93,11 @@ function TableRow({ row, match, finances, link, returnTo, can, sheetId, openId, 
   return <tr data-colis-row={row.id} data-stage={row.stage.key}>
     <th scope="row">
       <Link to={link(row)} className="colis-row-name" data-colis-name={row.id}>{row.clientName}</Link>
-      <span className="colis-sub">{[row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
+      {/* La Réunion with its delivery zone: the zone stands for the island (« SUD Le Tampon »), on one line. */}
+      <span className="colis-sub">{row.zone
+        ? <><ZoneTag zone={row.zone} label={row.zoneLabel} region={row.destinationLabel} />{row.commune ? ` ${row.commune}` : ''}</>
+        : [row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
+      <ClientMeta clientRef={row.clientRef} forfaitLabel={row.forfaitLabel} />
       {/* Found by a number: which one, so the team sees why the line is there. */}
       {match && <span className="colis-match" data-match={row.id}><Search size={15} aria-hidden="true" className="shrink-0" /><span>{match}</span></span>}
     </th>
