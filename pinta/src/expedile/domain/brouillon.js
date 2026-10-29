@@ -862,7 +862,7 @@ export function colisSearchMatch(row, q = '') {
   if (!row || !query) return null;
   const code = parseParcelCode(query);
   if (code.ok && code.ref.toUpperCase() === String(row.ref || '').toUpperCase()) {
-    return code.index !== null ? `Colis ${code.index}/${code.count} · ${row.ref}` : `${IDENTITY_LABELS.ref} ${row.ref}`;
+    return code.index !== null ? `Colis ${code.index}/${code.count} · ${IDENTITY_LABELS.ref} ${row.ref}` : `${IDENTITY_LABELS.ref} ${row.ref}`;
   }
   const wanted = compactCode(query).toUpperCase();
   if (wanted.length < MATCH_MIN_LENGTH) return null;

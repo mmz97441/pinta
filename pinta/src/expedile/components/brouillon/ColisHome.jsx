@@ -71,7 +71,8 @@ function GroupHead({ group }) {
     <span className="colis-group-title">
       <Icon size={20} aria-hidden="true" className="shrink-0" />
       <strong>{[group.label, group.destinationLabel].filter(Boolean).join(' · ')}</strong>
-      {!none && group.ref && <span>{group.ref}</span>}
+      {/* The departure's number, with its « N° » as the client's (« N° ENV-2026-036 »). */}
+      {!none && group.ref && <span>N° <span className="keep-token">{group.ref}</span></span>}
       {group.closingLabel && <span>{group.closingLabel}</span>}
     </span>
     <span className="colis-group-totals">{totalsParts(group.totals, { amount: true }).join(' · ')}</span>

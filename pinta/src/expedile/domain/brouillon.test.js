@@ -687,7 +687,7 @@ test('the search finds a dossier by its expedition: the departure’s reference 
   assert.equal(match('d-2', '1Z999AA'), 'Suivi 1Z999AA10123456784 · carton 1', 'Part of the number.');
   assert.equal(match('d-2', 'exp-bbb222'), 'N° d’envoi EXP-BBB222');
   assert.equal(match('d-2', 'bbb222'), 'N° d’envoi EXP-BBB222');
-  assert.equal(match('d-2', 'EXP-BBB222-1-2'), 'Colis 1/2 · EXP-BBB222', 'A parcel label scanned.');
+  assert.equal(match('d-2', 'EXP-BBB222-1-2'), 'Colis 1/2 · N° d’envoi EXP-BBB222', 'A parcel label scanned.');
   assert.equal(match('d-1', 'payet'), null, 'A name: the line says it already.');
   assert.equal(match('d-1', '6A'), null, 'Too short to be a number.');
   assert.equal(match('d-1', ''), null);

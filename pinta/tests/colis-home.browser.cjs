@@ -461,9 +461,9 @@ async function main() {
       await f.page.locator('.colis-group-row').first().waitFor();
       const groups = await f.page.locator('.colis-group-row').evaluateAll(rows => rows.map(row => row.innerText.replace(/\s+/g, ' ').trim()));
       assert.equal(groups.length, 4, groups.join('\n'));
-      assert.match(groups[0], /^Départ du .+ · Réunion ENV-TEST-01 clôture .+, 17 h 3 clients · 9 cartons · [\d,]+ kg · [\d,]+ m³ · 229,50 € \(2 prix connus sur 3\)$/);
-      assert.match(groups[1], /^Départ du .* · Mayotte ENV-TEST-02 .*1 client · 1 carton .*prix à calculer$/);
-      assert.match(groups[2], /^Départ du .* · Réunion ENV-TEST-03 .*2 clients · 7 cartons/);
+      assert.match(groups[0], /^Départ du .+ · Réunion N° ENV-TEST-01 clôture .+, 17 h 3 clients · 9 cartons · [\d,]+ kg · [\d,]+ m³ · 229,50 € \(2 prix connus sur 3\)$/);
+      assert.match(groups[1], /^Départ du .* · Mayotte N° ENV-TEST-02 .*1 client · 1 carton .*prix à calculer$/);
+      assert.match(groups[2], /^Départ du .* · Réunion N° ENV-TEST-03 .*2 clients · 7 cartons/);
       assert.match(groups[3], /^Départ à choisir 1 client · 2 cartons/);
       await waitForOrder(f, ['Grondin Jean', 'Payet Flavie', 'Rivière Marie-Claude', 'Abdallah Mohamed', 'Boyer Sandrine', 'Hoarau Jean-Marc', 'Técher Johnny']);
       await assertReadable(f, 'groups');
@@ -977,7 +977,7 @@ async function main() {
           return { inside: box.left >= frame.left - 1 && box.right <= frame.right + 1, text: element.innerText.replace(/\s+/g, ' ').trim() };
         });
         assert.ok(heading.inside, JSON.stringify(heading));
-        assert.match(heading.text, /^Départ du .+ · Réunion ENV-TEST-01/);
+        assert.match(heading.text, /^Départ du .+ · Réunion N° ENV-TEST-01/);
         assert.equal((await tableFrame(f, 'colis-liste')).pageOverflow, false);
         await assertReadable(f, `phone groups ${theme}`);
         await assertAccessible(f, `phone groups ${theme}`);
