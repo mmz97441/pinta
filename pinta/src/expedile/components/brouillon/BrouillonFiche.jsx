@@ -16,7 +16,8 @@ import ColisAction from './ColisAction';
 import ConsentSheet from './ConsentSheet';
 import ArrivalNoticeBlock from './ArrivalNoticeBlock';
 import ScrollFrame from './ScrollFrame';
-import StagePill, { ClientMeta, ZoneTag } from './StagePill';
+import StagePill from './StagePill';
+import IdentityFacts from './IdentityFacts';
 import { dossierHref as wholeDossierHref, withReturnTo } from './colisLinks';
 import useConsentSheet from './useConsentSheet';
 import useReceptionSignals from './useReceptionSignals';
@@ -269,19 +270,16 @@ export default function BrouillonFiche() {
 
   return <div className={`${PAGE} ${twoColumns ? 'max-w-[1200px]' : 'max-w-[900px]'} space-y-5`} data-testid="brouillon-fiche">
     <BackLink to={back} />
-    <header className="grid gap-2">
-      <h1 className="fiche-title">{header.clientName}</h1>
-      <p className="m-0 text-[15px] colis-muted">
-        {[header.destinationLabel, header.commune].filter(Boolean).join(' · ')}{header.zone && <> <ZoneTag zone={header.zone} label={header.zoneLabel} /></>}
-        {header.clientTypeLabel && <>{' · '}{header.clientTypeLabel}</>}
-        {' · '}{header.casier ? <>Casier <span className="colis-code" style={{ color: 'var(--colis-text)' }}>{header.casier}</span></> : header.casierLabel}
-        {header.ref && <>{' · '}<span className="keep-token">{header.ref}</span></>}
-      </p>
-      <ClientMeta clientRef={header.clientRef} forfaitLabel={header.forfaitLabel} className="m-0 block text-[15px] colis-muted" />
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <StagePill stage={header.stage} />
-        {header.stage.detail && <span className="text-[15px] colis-muted">{header.stage.detail}</span>}
+    {/* The client, where the dossier is, then each fact with its word: the shipment beside its client. */}
+    <header className="grid gap-4">
+      <div className="grid gap-2">
+        <h1 className="fiche-title">{header.clientName}</h1>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1" data-testid="fiche-etape">
+          <StagePill stage={header.stage} />
+          {header.stage.detail && <span className="text-[15px] colis-muted">{header.stage.detail}</span>}
+        </div>
       </div>
+      <IdentityFacts identity={header.identity} />
     </header>
     {/* An interrupted load is stated once, by the shell's banner. */}
     {read.state === 'failed' && !outage && <p className="colis-quiet" data-testid="fiche-actualisation"><span>Ce dossier n’a pas pu être actualisé ({read.reason}) : vous voyez sa dernière version chargée.</span><button type="button" onClick={() => setAttempt(value => value + 1)} className="colis-link-button">Réessayer</button></p>}

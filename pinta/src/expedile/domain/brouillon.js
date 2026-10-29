@@ -1,4 +1,5 @@
-import { ABONNEMENTS, DESTINATIONS, STATUTS, getSecteurByCP } from '../constants/index.js';
+import { DESTINATIONS, STATUTS } from '../constants/index.js';
+import { IDENTITY_LABELS, ZONES, dossierIdentity } from './dossierIdentity.js';
 import { RECEPTION_APPEND_STATUSES, RECEPTION_MEASURES, hasCompleteReceptionMeasurements, receptionAppendBlockReason, receptionAppendImpact, receptionCartonManifest, receptionDateSummary } from './reception.js';
 import { PAYMENT_DETAIL_LABELS, PAYMENT_STATE_LABELS, TABLE_COLUMNS, TAXES_PRO_LABEL, buildDossierTableModel, formatDossierTableDate } from './dossierTable.js';
 import { statusTone } from './dossierTableTone.js';
@@ -299,7 +300,9 @@ export const BROUILLON_STAGES = Object.freeze([
   { key: 'client_a_repondu', label: 'Le client a répondu' },
   { key: 'accord_a_demander', label: 'Accord à demander' },
   { key: 'demande_a_verifier', label: 'Demande à vérifier' },
-  { key: 'attend_client', label: 'Attend le client' },
+  // What is awaited, said (team request of 29 October 2026): its agreement; CLIENT_WAIT_LABEL when the client chose to
+  // wait for his other parcels.
+  { key: 'attend_client', label: 'Attend son accord' },
   { key: 'client_refuse', label: 'Le client refuse' },
   { key: 'produit_interdit', label: 'Produit interdit à régler' },
   { key: 'a_preparer', label: 'À préparer' },
@@ -308,6 +311,8 @@ export const BROUILLON_STAGES = Object.freeze([
   { key: 'pret_pour_devis', label: 'Prêt pour le devis' },
 ].map(item => Object.freeze(item)));
 const STAGE_LABELS = Object.fromEntries(BROUILLON_STAGES.map(item => [item.key, item.label]));
+/** The step `attend_client` once the client answered « Attendre mes autres colis »: the dossier waits for his parcels. */
+export const CLIENT_WAIT_LABEL = 'Attend ses autres colis';
 
 /** What a row without action says: the dossier waits for someone else. */
 export const NO_ACTION_LABEL = 'Rien à faire';
@@ -479,13 +484,41 @@ function consentNotDelivered(dossier, now) {
   return onItsWay && now - since > SEND_CHECK_MS ? { message, wording: STUCK_SEND[outbox] || STUCK_SEND.unknown } : null;
 }
 
+/** How a request or relance of consent left, said with its channel: « demandé le … » / « relancé le … » (Telegram),
+ * « demande préparée par e-mail le … » (no e-mail provider is connected: a draft proves no sending), « demande déposée
+ * dans son espace le … » (the client portal). `capital`: at the start of the detail. */
+function sentWording(message, at, { relance = false, capital = false } = {}) {
+  const day = dateLabel(at);
+  const noun = relance ? 'relance' : 'demande';
+  const phrase = message?.canal === 'email' ? `${noun} préparée par e-mail le ${day}`
+    : message?.canal === 'portal' ? `${noun} déposée dans son espace le ${day}`
+      : `${relance ? 'relancé' : 'demandé'} le ${day}`;
+  return capital ? `${phrase.charAt(0).toUpperCase()}${phrase.slice(1)}` : phrase;
+}
+
+/** The latest request of consent the team wrote (demande_feu_vert), or null. */
+function latestRequest(dossier) {
+  return (Array.isArray(dossier.messages) ? dossier.messages : [])
+    .filter(message => (message?.type ?? 'staff') === 'staff' && message.template === 'demande_feu_vert' && instantOf(message.createdAt) !== null)
+    .reduce((last, message) => !last || instantOf(message.createdAt) > instantOf(last.createdAt) || instantOf(message.createdAt) === instantOf(last.createdAt) && String(message.id) > String(last.id) ? message : last, null);
+}
+
+/** When the request was made, when the dossier does not record its delivery (`demandeFeuVertEnvoyeeAt`, a Telegram
+ * delivery only): an e-mail or portal request with its channel, a Telegram one at its delivery, else « date de la
+ * demande inconnue » — never a bare « Sans réponse » that says nothing of what was asked. */
+function requestWithoutDelivery(dossier) {
+  const request = latestRequest(dossier);
+  if (!request) return 'date de la demande inconnue';
+  return sentWording(request, request.canal === 'telegram' ? request.outboxSentAt || request.createdAt : request.createdAt);
+}
+
 function waitingStage(f) {
   const { dossier, now } = f;
   if (needsConversationAction(dossier)) return repliedStage(f);
   const consent = consentState(dossier, now);
   const waitChosen = consent?.stage === 'client_waiting';
   // A wait the client chose: nothing to do until its day has passed.
-  if (waitChosen && !consent.over) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', null);
+  if (waitChosen && !consent.over) return stage('attend_client', CLIENT_WAIT_LABEL, consentSummary(consent), 'waiting', null);
   // A request or relance that did not reach the client is checked in the conversation, never relanced.
   const lost = consentNotDelivered(dossier, now);
   if (lost) return stage('demande_a_verifier', STAGE_LABELS.demande_a_verifier, `${lost.message.template === 'relance_feu_vert' ? 'Relance' : 'Demande'} du ${dateLabel(lost.message.createdAt)} · ${lost.wording}`,
@@ -497,18 +530,20 @@ function waitingStage(f) {
   if (followUp?.pending) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relance' : 'Demande'} en cours d’envoi`, 'waiting', null);
   const requestedAt = dateLabel(dossier.demandeFeuVertEnvoyeeAt);
   const last = relance ? relance.delivered || !relance.deliveryLabel ? `relancé le ${dateLabel(relance.at)}` : `relance du ${dateLabel(relance.at)} · ${relance.deliveryLabel}`
-    : requestedAt ? `demandé le ${requestedAt}` : '';
+    : requestedAt ? `demandé le ${requestedAt}` : requestWithoutDelivery(dossier);
+  // The message being followed up (consentFollowUp's), said with its channel: an e-mail draft is « préparée », not sent.
+  const followed = followUp ? sentWording(latestConsentMessage(dossier), followUp.at, { relance: Boolean(relance), capital: true }) : null;
   // A reminder leaves on its own (relancesAccordAuto, consentReminders.js): nothing to do but to know when.
   const auto = autoReminderPlan(dossier, { client: f.client, settings: f.settings, now, openConversationClients: f.openConversationClients });
   if (auto && !auto.exhausted) {
-    const head = followUp ? `${relance ? 'Relancé' : 'Demandé'} le ${dateLabel(followUp.at)}` : `Sans réponse${last ? ` · ${last}` : ''}`;
+    const head = followed || `Sans réponse${last ? ` · ${last}` : ''}`;
     const next = auto.suspended ? 'relance auto suspendue : conversation à traiter' : auto.due ? 'relance auto imminente' : `relance auto le ${dateLabel(auto.nextAt)}`;
     return stage('attend_client', STAGE_LABELS.attend_client, `${head} · ${next}`, 'waiting', null);
   }
-  if (followUp) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relancé' : 'Demandé'} le ${dateLabel(followUp.at)}`, 'waiting', null);
+  if (followed) return stage('attend_client', STAGE_LABELS.attend_client, followed, 'waiting', null);
   // The wait has ended (« Attente terminée … à réexaminer »): the client answered « wait », so the accord is asked
   // again from the accord task (a new request version), never relanced on the old one.
-  if (waitChosen) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', ACTIONS.redemanderAccord());
+  if (waitChosen) return stage('attend_client', CLIENT_WAIT_LABEL, consentSummary(consent), 'waiting', ACTIONS.redemanderAccord());
   // No follow-up running and no automatic reminder left (they are off, the client has no Telegram, or they were all
   // sent): the relance is the team's. An e-mail relance kept as a draft says so (« Brouillon manuel »).
   const silence = auto?.exhausted ? `Sans réponse après ${countLabel(auto.sent, 'relance', 'relances')}` : 'Sans réponse';
@@ -644,24 +679,8 @@ export function colisStage(dossier, ctx = {}) {
 
 // ── Rows ─────────────────────────────────────────────────────────────────────
 const UNKNOWN_CLIENT = 'Client non renseigné';
-const clientTypeLabel = client => !client ? null : client.type === 'pro' ? 'Professionnel' : client.type === 'particulier' ? 'Particulier' : 'Type à préciser';
-
-/** The delivery zones of La Réunion (getSecteurByCP, from the postcode), in the order of « Par destination ». */
-export const ZONES = Object.freeze({ NORD: 'Nord', EST: 'Est', OUEST: 'Ouest', SUD: 'Sud' });
+// The zones, the plan and the type of client: domain/dossierIdentity.js, the words every screen uses.
 const ZONE_ORDER = Object.keys(ZONES);
-/** The zone of a client delivered in La Réunion (« NORD »…), null elsewhere or for a postcode the table does not know. */
-function zoneOf(client, destinationCode) {
-  if (destinationCode !== '974') return null;
-  const zone = getSecteurByCP(client?.cp);
-  return Object.prototype.hasOwnProperty.call(ZONES, zone) ? zone : null;
-}
-/** « Freemium », « Premium Annuel », « VIP Annuel » (ABONNEMENTS), « Premium » for the historical offer; null without one. */
-function forfaitLabel(client) {
-  const key = text(client?.abonnement);
-  if (!key) return null;
-  if (Object.prototype.hasOwnProperty.call(ABONNEMENTS, key)) return ABONNEMENTS[key].label;
-  return key === 'premium' ? 'Premium' : null;
-}
 
 /** The received cartons as the dossier records them (receptionCartonManifest: a former single carton without
  * per-carton measures keeps its own; several cartons are never split from a total), with their arrival dates. */
@@ -714,7 +733,7 @@ function dimensionsOf(dossier, cartons) {
  * tracking number, the departure's reference and the carrier's number of the expedition. */
 function searchCodesOf(dossier, cartons, departure) {
   const codes = [];
-  if (text(dossier.ref)) codes.push({ value: text(dossier.ref), label: `Dossier ${text(dossier.ref)}` });
+  if (text(dossier.ref)) codes.push({ value: text(dossier.ref), label: `${IDENTITY_LABELS.ref} ${text(dossier.ref)}` });
   for (const carton of cartons) if (carton.tracking) codes.push({ value: carton.tracking, label: cartons.length > 1 ? `Suivi ${carton.tracking} · carton ${carton.number}` : `Suivi ${carton.tracking}` });
   // A tracking number recorded without its carton (former dossiers): found all the same.
   for (const tracking of trackingNumbers(dossier)) if (!codes.some(code => code.value === tracking)) codes.push({ value: tracking, label: `Suivi ${tracking}` });
@@ -767,22 +786,22 @@ function rowOf(f) {
   const cartons = receivedCartons(dossier, now, f.pending);
   const measures = measuredTotals(cartons);
   const known = clientDisplayName(client) || text(client?.raisonSociale) || null;
-  const code = dossierDestinationCode(dossier, client || {});
   const lastReceivedAt = model.reception.lastReceivedAt;
   const departure = departureOf(f);
   const searchCodes = searchCodesOf(dossier, cartons, departure);
   const codes = searchCodes.map(code => code.value);
-  const casier = text(dossier.casier) || null;
-  const zone = zoneOf(client, code);
-  const forfait = forfaitLabel(client);
+  // Who and what the dossier is, in the words of every screen (domain/dossierIdentity.js).
+  const identity = dossierIdentity(dossier, client);
+  const { casier, zone, forfaitLabel: forfait } = identity;
   return {
     id: dossier.id, ref: dossier.ref || null, statut: dossier.statut, tab: f.tab,
     clientId: dossier.clientId || null, clientName: known || UNKNOWN_CLIENT, clientKnown: Boolean(known),
-    clientRef: text(client?.ref) || null, forfait: text(client?.abonnement) || null, forfaitLabel: forfait,
-    clientType: client?.type || null, clientTypeLabel: clientTypeLabel(client),
-    destinationCode: code || null, destinationLabel: DESTINATIONS[code]?.label || 'Destination à préciser',
-    zone, zoneLabel: zone ? ZONES[zone] : null,
-    commune: text(client?.commune) || text(client?.ville) || null,
+    clientRef: identity.clientRef, forfait: text(client?.abonnement) || null, forfaitLabel: forfait,
+    clientType: client?.type || null, clientTypeLabel: identity.clientTypeLabel,
+    destinationCode: identity.destinationCode, destinationLabel: identity.destinationLabel, destinationName: identity.destinationName,
+    zone, zoneLabel: identity.zoneLabel,
+    commune: identity.commune,
+    identity,
     cartons: cartons.length, cartonsLabel: countLabel(cartons.length, 'carton', 'cartons'), pendingCartons: f.pending?.cartonCount || 0,
     casier, casierLabel: casier ? `Casier ${casier}` : 'Casier à renseigner',
     poids: measures.poids, poidsLabel: measures.poidsLabel, volume: measures.volume, volumeLabel: measures.volumeLabel,
@@ -799,8 +818,9 @@ function rowOf(f) {
 
 /**
  * One row of « Colis »: `id, ref, statut, tab, clientId, clientName, clientKnown, clientRef (« CLT… »), forfait,
- * forfaitLabel (« Premium Annuel »), clientType, clientTypeLabel, destinationCode, destinationLabel, zone (« SUD », La
- * Réunion only), zoneLabel (« Sud »), commune, cartons, cartonsLabel, pendingCartons, casier, casierLabel, poids,
+ * forfaitLabel (« Premium Annuel »), clientType, clientTypeLabel, destinationCode, destinationLabel, destinationName
+ * (« La Réunion »), zone (« SUD », La Réunion only), zoneLabel (« Sud »), commune, identity (dossierIdentity: the same
+ * facts for the screens that name them), cartons, cartonsLabel, pendingCartons, casier, casierLabel, poids,
  * poidsLabel, volume, volumeLabel, dimensions, lastReceivedAt, lastReceivedLabel, stage, action, total, departure,
  * ficheHref, searchCodes, searchText`. `poids`/`volume`: the received cartons, null unless every carton is measured.
  * `dimensions` = `{ prepared, lines, shown, moreLabel, label }`: the parcels to ship once prepared, otherwise the
@@ -833,7 +853,7 @@ export function filterColisRows(rows = [], q = '') {
 const MATCH_MIN_LENGTH = 3;
 
 /**
- * What a row was found by when the search is a number: « Dossier EXP-… », « Suivi … · carton 2 », « Départ ENV-… »,
+ * What a row was found by when the search is a number: « N° d’envoi EXP-… », « Suivi … · carton 2 », « Départ ENV-… »,
  * « Expédition … », « Colis 1/2 · EXP-… » for a parcel label; null when the search is a name or matches no number
  * of the row. The screen shows it under the client's name, so the team sees why the line is there.
  */
@@ -842,7 +862,7 @@ export function colisSearchMatch(row, q = '') {
   if (!row || !query) return null;
   const code = parseParcelCode(query);
   if (code.ok && code.ref.toUpperCase() === String(row.ref || '').toUpperCase()) {
-    return code.index !== null ? `Colis ${code.index}/${code.count} · ${row.ref}` : `Dossier ${row.ref}`;
+    return code.index !== null ? `Colis ${code.index}/${code.count} · ${row.ref}` : `${IDENTITY_LABELS.ref} ${row.ref}`;
   }
   const wanted = compactCode(query).toUpperCase();
   if (wanted.length < MATCH_MIN_LENGTH) return null;
@@ -940,7 +960,7 @@ const DESTINATION_ORDER = ['974', '976', '971', '972'];
 /**
  * « Par destination »: one group per destination of the rows (`destinationCode`: the client's postcode, the paid
  * quote's destination once paid), in the order of DESTINATIONS (Réunion, Mayotte, Guadeloupe, Martinique), then
- * « Destination à vérifier » for a destination unknown; La Réunion by delivery zone (« Réunion · Nord », Est, Ouest,
+ * « Destination à vérifier » for a destination unknown; La Réunion by delivery zone (« Réunion · zone Nord », Est, Ouest,
  * Sud, then « Réunion » for a postcode without zone). Each group: `{ key, code, zone, label, rows, totals }`
  * (colisTotals), its rows by the client's name (« Par nom »).
  */
@@ -951,7 +971,7 @@ export function groupColisRowsByDestination(rows = []) {
     const code = Object.prototype.hasOwnProperty.call(DESTINATIONS, row.destinationCode) ? row.destinationCode : null;
     const zone = code === '974' && Object.prototype.hasOwnProperty.call(ZONES, row.zone) ? row.zone : null;
     const key = code ? `destination:${code}${zone ? `:${zone}` : ''}` : NO_DESTINATION_GROUP_KEY;
-    if (!groups.has(key)) groups.set(key, { key, code, zone, label: code ? `${DESTINATIONS[code].label}${zone ? ` · ${ZONES[zone]}` : ''}` : UNKNOWN_DESTINATION_LABEL, rows: [] });
+    if (!groups.has(key)) groups.set(key, { key, code, zone, label: code ? `${DESTINATIONS[code].label}${zone ? ` · zone ${ZONES[zone]}` : ''}` : UNKNOWN_DESTINATION_LABEL, rows: [] });
     groups.get(key).rows.push(row);
   }
   const rank = group => (group.code ? order.indexOf(group.code) : order.length) * (ZONE_ORDER.length + 1) + (group.zone ? ZONE_ORDER.indexOf(group.zone) : ZONE_ORDER.length);
@@ -1243,7 +1263,8 @@ function latestNotice(notices, colisId) {
 /**
  * The Brouillon sheet of a dossier: `{ id, ref, header, stage, action, links, received, optimized, price, missing,
  * notice, noticeLabel }`.
- * - `header`: name, type of client, destination, commune, casier, step;
+ * - `header`: name, type of client, destination, commune, casier, step, and `identity` (dossierIdentity: every fact
+ *   the sheet names with its word);
  * - `action`: the row's one action with its `href` (way back: this sheet), or null;
  * - `links`: « Tout le dossier » (/colis/:id?returnTo=/brouillon/:id) and « Ajouter un carton »
  *   (/recevoir?dossier=:id; no `href` when receptionAppendBlockReason refuses it, `blockedReason` says why);
@@ -1275,7 +1296,7 @@ export function brouillonFiche(dossier, ctx = {}) {
     id: source.id || null, ref: source.ref || null,
     header: { ref: row.ref, clientName: row.clientName, clientTypeLabel: row.clientTypeLabel, destinationLabel: row.destinationLabel, commune: row.commune,
       zone: row.zone, zoneLabel: row.zoneLabel, clientRef: row.clientRef, forfaitLabel: row.forfaitLabel,
-      casier: row.casier, casierLabel: row.casierLabel, stage: row.stage },
+      casier: row.casier, casierLabel: row.casierLabel, stage: row.stage, identity: row.identity },
     stage: row.stage,
     action: row.action ? { ...row.action, href: colisActionHref(row, id ? `/brouillon/${id}` : '/') } : null,
     links: {

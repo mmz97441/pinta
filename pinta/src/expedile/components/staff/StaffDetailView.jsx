@@ -34,6 +34,7 @@ import { departureFieldEditable, departureIssue, plannedDeparturesFor } from '..
 import { canSeeDossierFinances } from '../../domain/dossierOverview';
 import { plural, pluralWord } from '../../domain/plural';
 import { clientPlan } from '../../domain/clientPlan';
+import { IDENTITY_LABELS } from '../../domain/dossierIdentity';
 import DossierDeparture from '../detail/DossierDeparture';
 import ParcelLabelsButton from './ParcelLabelsButton';
 import '../detail/dossierActions.css';
@@ -685,7 +686,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
         return (
           <Section title="Préparer les colis" icon={Check} color={borderColor}>
             <div className="space-y-3">
-              <p className="text-sm text-slate-700">{sel.ref} · {cl?.nom} · Casier {sel.casier || "à renseigner"} · {plural(receptionCartonManifest(sel).nbColis, 'carton')} {pluralWord(receptionCartonManifest(sel).nbColis, 'reçu')}</p>
+              <p className="text-sm text-slate-700">{IDENTITY_LABELS.ref} {sel.ref} · {cl?.nom} · Casier {sel.casier || "à renseigner"} · {plural(receptionCartonManifest(sel).nbColis, 'carton')} {pluralWord(receptionCartonManifest(sel).nbColis, 'reçu')}</p>
               <div className="flex items-center gap-2 p-2 rounded-lg bg-green-50 border border-green-200">
                 <Check size={12} className="text-green-500 flex-shrink-0" />
                 <p className="text-[10px] font-bold text-green-700">Accord client reçu</p>

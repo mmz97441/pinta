@@ -9,6 +9,7 @@ import { buildDossierTableModel, formatDossierTableDate } from './dossierTable.j
 import { departureDayLabel, parisCalendarDay } from './departureGroups.js';
 import { wishedDepartureLabel } from './departurePlanning.js';
 import { plural, pluralWord } from './plural.js';
+import { IDENTITY_MISSING, dossierIdentity } from './dossierIdentity.js';
 
 const DOCUMENT_PERMISSIONS = ['perm_factures_voir', 'perm_factures_ajouter', 'perm_factures_valider', 'perm_factures_refuser', 'perm_factures_ocr', 'perm_factures_modifier_articles'];
 const FINANCE_PERMISSIONS = ['perm_finances_voir_total', 'perm_colis_calculer_devis', 'perm_colis_envoyer_devis', 'perm_colis_confirmer_paiement'];
@@ -210,7 +211,9 @@ export function buildDossierOverview(dossier = {}, { client = {}, envois = [], c
   if (AFTER_PREPARATION.has(dossier.statut) && !finalCurrent) alerts.push({ code: 'preparation-unconfirmed', task: 'preparation', message: 'Les mesures après optimisation restent à vérifier.' });
   if (financeVisible && dossier.statut === 'paye' && !fullyPaid) alerts.push({ code: 'payment-unconfirmed', task: 'paiement', message: 'Le statut indique payé, mais le règlement complet doit être vérifié.' });
   return {
-    reference: text(dossier.ref) || 'Référence à préciser', casier: text(dossier.casier) || null,
+    reference: text(dossier.ref) || IDENTITY_MISSING.ref, casier: text(dossier.casier) || null,
+    // Who and what the dossier is, in the words of every screen (the delivery, the client, the plan).
+    identity: dossierIdentity(dossier, client),
     currentTask, statusLabel: knownStatus ? `${STATUTS[dossier.statut].label}${dossier.archive ? ' · Archivé' : ''}` : 'État à vérifier',
     steps, received, optimization, invoices, payment, departure, delivery, alerts: alerts.slice(0, 2),
   };

@@ -35,7 +35,7 @@ test('no receipt evidence fabricates neither one carton nor a recorded reception
   assert.equal(result.received.count, null); assert.deepEqual(result.received.boxes, []);
   assert.equal(result.received.totalWeight, null); assert.equal(result.received.complete, false);
   assert.equal(step(result, 'reception').state, 'current');
-  assert.equal(result.casier, null); assert.equal(result.reference, 'Référence à préciser');
+  assert.equal(result.casier, null); assert.equal(result.reference, 'Non attribué');
 });
 
 test('missing legacy carton dimensions stay missing and a multi-carton total is never divided', () => {

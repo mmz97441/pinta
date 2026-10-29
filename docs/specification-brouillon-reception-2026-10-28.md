@@ -38,7 +38,7 @@ En haut de l'onglet : nombre de clients, de cartons, poids et volume du stock af
 
 ### Une ligne par dossier
 
-- **Client** : nom, destination et commune.
+- **Client** : nom, zone de livraison pour La Réunion (« Zone EST ») ou destination, commune, puis « N° client … » et « Forfait … », chacun avec son mot.
 - **Colis** : nombre de cartons, casier, poids réel et volume (m³) des cartons reçus, et leurs dimensions (une ligne par carton, trois au plus puis « + N autres » ; après la préparation, celles des colis préparés, précédées de « Préparé : »).
 - **Où en est-on** : une étape en mots simples et une précision d'une ligne.
 - **Total à payer** : total du devis enregistré et actif, sinon « À calculer ». Jamais un faux zéro.
@@ -50,7 +50,8 @@ En haut de l'onglet : nombre de clients, de cartons, poids et volume du stock af
 |---|---|---|
 | Réception à valider | Des cartons enregistrés n'ont pas encore été validés | Valider la réception |
 | Accord à demander | Accord du client jamais demandé, ou à redemander après un nouveau carton | Demander l'accord |
-| Attend le client | Accord demandé, pas de réponse ; ou le client a choisi d'attendre | Rien à faire tant que les relances automatiques partent (« relance auto le … ») ; « Relancer » quand elles sont épuisées, désactivées ou impossibles (client sans Telegram) |
+| Attend son accord | Accord demandé, pas de réponse (la précision dit comment la demande est partie : « demandé le … » sur Telegram, « demande préparée par e-mail le … », « demande déposée dans son espace le … », ou « date de la demande inconnue ») | Rien à faire tant que les relances automatiques partent (« relance auto le … ») ; « Relancer » quand elles sont épuisées, désactivées ou impossibles (client sans Telegram) |
+| Attend ses autres colis | Le client a choisi « Attendre mes autres colis » | Rien à faire jusqu'à la date choisie ; ensuite « Redemander l'accord » |
 | Le client refuse | Refus enregistré | Voir le dossier |
 | À préparer | Accord donné, préparation non terminée | Préparer |
 | Facture manquante | Préparé, facture d'achat absente ou à vérifier | Ajouter la facture |
@@ -72,7 +73,7 @@ La recherche porte sur le nom, la référence du dossier, le casier, le numéro 
 
 ### Fiche Brouillon d'un client
 
-- En-tête : nom, destination, type de client, casier, étape.
+- En-tête : nom, étape (avec ce qu'on attend et depuis quand), puis chaque information avec son mot, l'envoi à gauche et son client à droite (l'un sous l'autre sur téléphone) : **N° d'envoi**, **Casier**, **Livraison** (commune · Zone · destination) ; **Client** (N° client · particulier ou professionnel), **Forfait**. Jamais un code nu ; « Non attribué », « À renseigner », « Non renseigné » quand l'information manque.
 - **Cartons reçus** : numéro, vendeur, numéro de suivi, dimensions, poids, volume, et le total.
 - **Après optimisation** : colis à expédier avec dimensions, poids et volume, total, et le gain de volume en pourcentage.
 - **Prix à payer** : transport (avec le poids facturé), douane (estimation des taxes à l'importation, payées à l'arrivée, comprises dans le prix, détaillées en octroi de mer, octroi de mer régional et TVA à l'importation), total, économie grâce à l'optimisation. Seulement depuis un devis enregistré ; sinon ce qui manque pour le calculer.
@@ -221,7 +222,7 @@ Module pur (imports avec extension `.js`, testé par `node --test`, compatible S
 | `reception_a_valider` | Réception à valider | des cartons attendent la validation | `valider_reception` « Valider la réception » → `/recevoir?client=<id>&valider=1` |
 | `mesures_a_completer` | Mesures à compléter | `receptionne` (ancien carton non mesuré) | `completer_mesures` → tâche `reception` |
 | `accord_a_demander` | Accord à demander | `mesure` | `demander_accord` « Demander l'accord » (panneau d'envoi sur place) |
-| `attend_client` | Attend le client | `attente_feu_vert` | aucune tant qu'une relance automatique reste à partir (`autoReminderPlan`, `domain/consentReminders.js` : « relance auto le … », « imminente », « suspendue : conversation à traiter ») ; `relancer` « Relancer » (panneau d'envoi sur place) quand `consentFollowUp` la dit due et qu'aucune relance automatique ne reste ; `redemander_accord` « Redemander l'accord » → tâche `accord` quand l'attente choisie par le client est terminée |
+| `attend_client` | Attend son accord ; « Attend ses autres colis » (`CLIENT_WAIT_LABEL`) quand le client a choisi d'attendre | `attente_feu_vert` | aucune tant qu'une relance automatique reste à partir (`autoReminderPlan`, `domain/consentReminders.js` : « relance auto le … », « imminente », « suspendue : conversation à traiter ») ; `relancer` « Relancer » (panneau d'envoi sur place) quand `consentFollowUp` la dit due et qu'aucune relance automatique ne reste ; `redemander_accord` « Redemander l'accord » → tâche `accord` quand l'attente choisie par le client est terminée |
 | `client_refuse` | Le client refuse | `refuse_client` | `voir_dossier` → tâche `accord` |
 | `produit_interdit` | Produit interdit à régler | produit interdit signalé et dossier accordé | `voir_dossier` → tâche `reception` |
 | `a_preparer` | À préparer | accord donné, préparation pas à jour | `preparer` → tâche `preparation` |
@@ -232,7 +233,7 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 
 ### Écrans Colis (`src/expedile/components/brouillon/`)
 
-`ColisHome.jsx` (route `/`) et `BrouillonFiche.jsx` (route `/brouillon/:id`). Données : `useApp()` (`data`, `clients`, `envois`, `settings`, `can`), `fetchPendingReceptions`, `fetchArrivalNotices`. « Demander l'accord » et « Relancer » réutilisent `TaskMessage` exactement comme `StaffDetailView` (modèles `demande_feu_vert` / `relance_feu_vert`, `beforeSend` = `demanderFeuVert`). Liens « Tout le dossier » → `/colis/:id?returnTo=/brouillon/:id`, « Ajouter un carton » → `/recevoir?dossier=:id`. Tableau sur tablette, cartes sur téléphone. Référence visuelle : les maquettes « Brouillon » du canevas de conception.
+`ColisHome.jsx` (route `/`) et `BrouillonFiche.jsx` (route `/brouillon/:id`). Les mots de l'identité d'un dossier (`N° d'envoi`, `Casier`, `Livraison`, `Client`, `N° client`, `Forfait`, `Zone`) viennent de `domain/dossierIdentity.js` ; `IdentityFacts.jsx` les affiche sur la fiche et sur la vue d'ensemble du dossier complet, `ZoneTag` (« Zone EST ») et `ClientMeta` sur la ligne. Données : `useApp()` (`data`, `clients`, `envois`, `settings`, `can`), `fetchPendingReceptions`, `fetchArrivalNotices`. « Demander l'accord » et « Relancer » réutilisent `TaskMessage` exactement comme `StaffDetailView` (modèles `demande_feu_vert` / `relance_feu_vert`, `beforeSend` = `demanderFeuVert`). Liens « Tout le dossier » → `/colis/:id?returnTo=/brouillon/:id`, « Ajouter un carton » → `/recevoir?dossier=:id`. Tableau sur tablette, cartes sur téléphone. Référence visuelle : les maquettes « Brouillon » du canevas de conception.
 
 ### Écrans Réception et avis (`src/expedile/components/receptionFlow/`)
 
@@ -266,3 +267,4 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 - **Page qui glissait.** Les textes masqués des écrans Colis et Réception (annonces pour lecteurs d'écran, légendes de tableau) ne rallongent plus la page entière : une mise au point ne fait plus remonter le menu.
 - **Comparaison avec l'outil actuel (SunApps)** : la réception de SunApps ne demande que le numéro de suivi ; ici, chaque carton a ses quatre mesures. **Décision de l'équipe : les mesures restent obligatoires à la réception.** La zone (NORD, EST, OUEST, SUD pour La Réunion), le numéro client et le forfait s'affichent désormais sur la ligne Colis et la fiche, et se cherchent. Restent absents : les SMS, un export TMS (format à fournir).
 - **Accord automatique** : voir la section du même nom (avis + accord en un message, relances à 48 h puis 24 h).
+- **Chaque information avec son mot** (« un nouveau va se perdre entre le forfait, le numéro d'envoi, le numéro client, la destination, la zone de livraison »). Sur la fiche Brouillon : l'étape d'abord, puis **N° d'envoi**, **Casier**, **Livraison** à côté de **Client** et **Forfait**. Sur la ligne Colis : « Zone EST », « N° client … », « Forfait … ». Sur le dossier complet : « N° d'envoi » dans l'en-tête et la vue d'ensemble, puis une ligne Livraison, Client, Forfait. L'étape « Attend le client » devient « Attend son accord » (ou « Attend ses autres colis ») ; une demande par e-mail dit « demande préparée par e-mail le … » au lieu d'un « Sans réponse » sans date. La recherche et ses correspondances parlent de « N° d'envoi ». Mêmes mots sur la ligne de préparation du dossier (« N° d'envoi … ») et sur la page client (« N° client … »). Restent à aligner, sur décision : le tableau Dossiers (menu Plus), les Départs et le contrôle de chargement, les exports Excel, et côté client le portail, le PDF du devis et les messages, qui disent encore « Référence ».

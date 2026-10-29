@@ -1,0 +1,38 @@
+/* Each fact with its word (IdentityFacts.jsx): « N° D’ENVOI EXP-TUALDS », « CLIENT N° CLI-7ASHU · Particulier »…
+   The label column is the same in both lists, so their values line up on a phone. Colours: those of the page that shows
+   it (« Colis » and its sheet: --colis-*, else the application's tokens), in both themes; sizes: the page may lower
+   them (the complete dossier's overview), the Colis pages read 15 px at least. */
+.identity-facts {
+  --identity-label: var(--colis-muted, var(--text-secondary, #605c56));
+  --identity-text: var(--colis-text, var(--text-primary, #2a2826));
+  --identity-line: var(--colis-line-soft, var(--border-subtle, #e5e0d3));
+  --identity-label-size: 15px;
+  --identity-value-size: 16px;
+  display: grid; gap: 10px 0; min-width: 0;
+}
+.identity-group { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 4px 12px; align-content: start; align-items: baseline; margin: 0; min-width: 0; }
+/* A row is its label and its value, laid in the list's two columns. */
+.identity-row { display: contents; }
+.identity-row dt {
+  margin: 0; color: var(--identity-label); font-size: var(--identity-label-size); font-weight: 700; line-height: 1.4;
+  letter-spacing: .03em; text-transform: uppercase;
+}
+.identity-row dd { margin: 0; min-width: 0; color: var(--identity-text); font-size: var(--identity-value-size); line-height: 1.45; overflow-wrap: anywhere; }
+.identity-code { font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace; font-weight: 700; }
+.identity-missing { color: var(--identity-label); }
+/* « Ste Suzanne », « La Réunion »: a place is never split; the line breaks between them. */
+.identity-part { white-space: nowrap; }
+
+/* « columns »: the client under the shipment, after a rule, on a phone; beside it from a tablet's width on. */
+.identity-facts[data-layout='columns'] > .identity-group + .identity-group { padding-top: 10px; border-top: 1px solid var(--identity-line); }
+/* Beside it, each list as wide as its content and its labels, the client's right after the shipment's. */
+@media (min-width: 720px) {
+  .identity-facts[data-layout='columns'] { grid-template-columns: minmax(0, max-content) minmax(0, max-content); justify-content: start; column-gap: 24px; }
+  .identity-facts[data-layout='columns'] > .identity-group { grid-template-columns: max-content minmax(0, 1fr); }
+  .identity-facts[data-layout='columns'] > .identity-group + .identity-group { padding: 0 0 0 24px; border-top: 0; border-left: 1px solid var(--identity-line); }
+}
+
+/* « inline »: one line that wraps, each fact kept whole with its label. */
+.identity-facts[data-layout='inline'] { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+.identity-facts[data-layout='inline'] > .identity-group { display: flex; flex-wrap: wrap; gap: 4px 28px; }
+.identity-facts[data-layout='inline'] .identity-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 8px; }

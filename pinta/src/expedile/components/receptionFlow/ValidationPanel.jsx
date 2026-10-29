@@ -216,7 +216,7 @@ export default function ValidationPanel({ client, session, update, version = 0, 
       try { delivery = await deliverMessage(message.colisId || recorded.items[0]?.colisId, message.id); }
       catch (error) { delivery = { ok: false, error: readableError(error, 'réseau indisponible', 'Réception · envoi Telegram') }; }
     }
-    // The dossiers as the server has them now: the agreement asked moves the dossier to « Attend le client », the
+    // The dossiers as the server has them now: the agreement asked moves the dossier to « Attend son accord », the
     // notice is among its messages.
     await Promise.all(recorded.items.map(item => refreshColis(item.colisId).catch(() => null)));
     // The notice as the server has it now (Telegram confirmed, e-mail to send…); otherwise what is known.

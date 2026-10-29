@@ -22,6 +22,13 @@
 .dossier-overview-links { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 4px 16px; flex: 0 1 auto; margin-left: auto; min-width: 0; }
 .dossier-overview-identity h2 { font-size: 1rem; font-weight: 700; }
 .dossier-overview-identity > span { font-weight: 600; font-size: .875rem; overflow-wrap: anywhere; color: var(--brand-text); }
+/* « N° d’envoi EXP-… »: the number with its word (domain/dossierIdentity.js), written like « Casier » and « Départ ». */
+.dossier-overview-label { color: var(--text-primary); font-weight: 400; }
+/* The line under the heading: Livraison, Client, Forfait (IdentityFacts, « inline »), at the overview's sizes, its
+   labels written like those of the heading. */
+.dossier-overview .identity-facts { --identity-label-size: .875rem; --identity-value-size: .875rem; margin-top: 6px; }
+.dossier-overview .identity-row dt { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.dossier-overview .identity-facts .colis-zone { font-size: .8125rem; }
 .dossier-overview-casier { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: .875rem; }
 .dossier-overview-casier-edit { display: inline-flex; align-items: center; gap: 6px; color: var(--brand-text); font-weight: 600; }
 .dossier-overview-facts { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 8px; }

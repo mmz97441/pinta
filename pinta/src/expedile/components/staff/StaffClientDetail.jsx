@@ -17,6 +17,7 @@ import usePersistentDraft from '../../hooks/usePersistentDraft';
 import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import useShellLoadBanner from '../../hooks/useShellLoadBanner';
 import { receptionCartonManifest } from '../../domain/reception';
+import { IDENTITY_LABELS } from '../../domain/dossierIdentity';
 import { REQUIRED_CLIENT_FIELDS, REQUIRED_CLIENT_KEYS, COMPLETION_FIELDS, filled, newClientFieldErrors, requiredFieldFormatError, blankingMessage, missingMessage, servedDestination, phoneOf, validPhone, dialablePhone, refusedClientFields, PHONE_FORMAT_MESSAGE } from '../../domain/clientRequirements';
 
 // ── Shared styles: brand.css tokens, readable in the light and dark themes ─────
@@ -555,7 +556,7 @@ function EditClientPage({ cl, onDone }) {
             <div className="min-w-0 flex-1 space-y-1.5">
               <h1 className="break-words text-xl font-black leading-tight" style={{ color: 'var(--brand-text)' }}>{cl.nom || 'Client sans nom'}</h1>
               <div className="flex flex-wrap items-center gap-1.5">
-                {cl.ref && <span className={`${CHIP} bg-surface font-mono text-secondary`}>{cl.ref}</span>}
+                {cl.ref && <span className={`${CHIP} bg-surface text-secondary`}>{IDENTITY_LABELS.clientRef} <span className="font-mono">{cl.ref}</span></span>}
                 {typeChip}
                 {cl.telegramChatId
                   ? <span className={`${CHIP} bg-green-100 text-green-800`}>Telegram lié</span>

@@ -9,6 +9,7 @@ import { workspaceReturnPath } from '../../domain/navigation';
 import { DOSSIER_TASKS, dossierTaskUrl, previousDossierTask, nextDossierTask } from '../../domain/dossierTasks';
 import { findDossierWorkAction } from '../../domain/personalWork';
 import { plural, pluralWord } from '../../domain/plural';
+import { IDENTITY_LABELS } from '../../domain/dossierIdentity';
 import TaskOwnership from '../workspace/TaskOwnership';
 import './dossierActions.css';
 
@@ -30,7 +31,8 @@ export default function DetailHeader({ task, conversation = false, onOpenContext
       <div className="mx-auto flex max-w-[1600px] flex-wrap items-center gap-2 sm:gap-3">
         <button aria-label="Retour à la liste de travail" onClick={() => navigate(workspaceReturnPath(location.search))} className="flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-xl text-slate-700 hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"><ArrowLeft size={21} /></button>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{sel.ref}</span><h1 className="text-base font-bold text-slate-900 dark:text-white">{conversation ? 'Conversation' : DOSSIER_TASKS[task]?.label || 'Dossier'}</h1></div>
+          {/* The shipment's number with its word (domain/dossierIdentity.js), then the task. */}
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1"><span className="text-sm text-slate-600 dark:text-slate-300">{IDENTITY_LABELS.ref}</span><span className="font-mono text-sm font-bold text-slate-700 dark:text-slate-200">{sel.ref}</span><span aria-hidden="true" className="hidden text-slate-500 sm:inline dark:text-slate-400">·</span><h1 className="text-base font-bold text-slate-900 dark:text-white">{conversation ? 'Conversation' : DOSSIER_TASKS[task]?.label || 'Dossier'}</h1></div>
           <p className="truncate text-xs text-slate-600 dark:text-slate-300">{selClient?.nom || 'Client'}{selDest ? ` · ${selDest.label || selDest.nom}` : ''}</p>
         </div>
         <button onClick={() => onOpenContext?.('reception')} aria-haspopup="dialog" className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-800"><PanelRightOpen size={17} /><span className="hidden sm:inline">Détails du dossier</span><span className="sm:hidden">Détails</span></button>

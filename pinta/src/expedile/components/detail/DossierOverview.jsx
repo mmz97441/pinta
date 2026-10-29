@@ -2,8 +2,14 @@ import React, { useEffect, useId, useRef, useState } from 'react';
 import { Check, Clock, AlertTriangle, Lock, Circle, Minus, Pencil, Package, Ruler, FileText, CalendarClock } from 'lucide-react';
 import { formatDossierTableDate } from '../../domain/dossierTable';
 import { plural } from '../../domain/plural';
+import { IDENTITY_LABELS } from '../../domain/dossierIdentity';
+import IdentityFacts from '../brouillon/IdentityFacts';
 import CasierEditor from './CasierEditor';
 import './dossierOverview.css';
+
+// The heading says the shipment's number, its Casier and its Départ; the line under it, where it is delivered, then
+// its client (as on the Brouillon sheet: the shipment, then the client).
+const CLIENT_FACTS = Object.freeze(['livraison', 'client', 'forfait']);
 
 // `planned`: a departure is assigned before the expedition is the current step;
 // the step names it (« Prévu le jeudi 8 octobre », the model's stateLabel).
@@ -115,7 +121,9 @@ export default function DossierOverview({
   // (open step, history). A group wraps whole, never one link alone.
   return <section aria-label="Vue d’ensemble du dossier" data-testid="dossier-overview" className="dossier-overview">
     <div className="dossier-overview-heading">
-      <div className="dossier-overview-identity"><h2>Vue d’ensemble</h2><span data-overview="reference">{model.reference || dossier.ref}</span></div>
+      <div className="dossier-overview-identity"><h2>Vue d’ensemble</h2>
+        <span className="dossier-overview-reference"><span className="dossier-overview-label">{IDENTITY_LABELS.ref}</span> <span data-overview="reference">{model.reference || dossier.ref}</span></span>
+      </div>
       <div className="dossier-overview-fields">
         <div className="dossier-overview-casier" data-overview="casier"><span>Casier <strong>{model.casier || 'à renseigner'}</strong></span>
           {canEditCasier && <button ref={casierButton} type="button" className="dossier-overview-casier-edit" aria-label="Modifier le casier du dossier"
@@ -132,6 +140,8 @@ export default function DossierOverview({
       {casierOpen && <CasierEditor id={casierEditorId} variant="summary" onDone={() => setCasierEditing(false)} />}
       {departureEditor}
     </div>
+    {/* Where it goes and its client, each fact with its word, as on the Brouillon sheet. */}
+    <IdentityFacts identity={model.identity} facts={CLIENT_FACTS} layout="inline" className="dossier-overview-client" testId="dossier-overview-client" />
 
     <div className="dossier-overview-facts">
       <div className="dossier-overview-fact" data-overview="received">

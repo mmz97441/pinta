@@ -94,7 +94,8 @@ function TableRow({ row, match, finances, link, returnTo, can, sheetId, openId, 
   return <tr data-colis-row={row.id} data-stage={row.stage.key}>
     <th scope="row">
       <Link to={link(row)} className="colis-row-name" data-colis-name={row.id}>{row.clientName}</Link>
-      {/* La Réunion with its delivery zone: the zone stands for the island (« SUD Le Tampon »), on one line. */}
+      {/* La Réunion with its delivery zone: the zone stands for the island (« Zone SUD Le Tampon »), on one line; then
+          the client's number and plan, each with its word (« N° client CLI-… », « Forfait … »). */}
       <span className="colis-sub">{row.zone
         ? <><ZoneTag zone={row.zone} label={row.zoneLabel} region={row.destinationLabel} />{row.commune ? ` ${row.commune}` : ''}</>
         : [row.destinationLabel, row.commune].filter(Boolean).join(' · ')}</span>
@@ -323,10 +324,10 @@ export default function ColisHome() {
 
     <div className="colis-toolbar">
       <div className="colis-search" data-filled={searchText ? 'true' : undefined}>
-        <label htmlFor={searchId} className="sr-only">Chercher par nom, numéro de colis, numéro de suivi ou numéro d’expédition</label>
+        <label htmlFor={searchId} className="sr-only">Chercher par nom, numéro d’envoi, numéro de suivi, numéro d’expédition ou numéro client</label>
         <Search size={22} aria-hidden="true" className="colis-search-icon" />
         <input ref={searchField} id={searchId} type="search" value={searchText} onChange={event => changeSearch(event.target.value)} onKeyDown={onSearchKey}
-          placeholder="Nom, n° de colis ou d’expédition" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" />
+          placeholder="Nom, n° d’envoi ou d’expédition" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false} enterKeyHint="search" />
         {searchText && <button type="button" aria-label="Effacer la recherche" className="colis-search-clear" onClick={() => { changeSearch(''); searchField.current?.focus(); }}><X size={20} aria-hidden="true" /></button>}
       </div>
       {wide
@@ -347,7 +348,7 @@ export default function ColisHome() {
       </section>
         : <section className="colis-empty" aria-labelledby="colis-vide">
           <h2 id="colis-vide">Aucun dossier de l’onglet {tab.label} ne correspond à « {searchText.trim()} »</h2>
-          <p>{elsewhere.length ? 'Ce que vous cherchez se trouve dans un autre onglet.' : 'Vérifiez l’orthographe, ou cherchez par numéro de colis, de suivi ou d’expédition.'}</p>
+          <p>{elsewhere.length ? 'Ce que vous cherchez se trouve dans un autre onglet.' : 'Vérifiez l’orthographe, ou cherchez par numéro d’envoi, de suivi ou d’expédition.'}</p>
           <div className="colis-empty-actions">
             {elsewhere.map(item => <Link key={item.key} to={listUrl({ onglet: item.key, q: searchText })} replace className="colis-action w-auto px-5">Voir {plural(item.count, 'dossier', 'dossiers')} dans {item.label}</Link>)}
             <button type="button" onClick={() => { changeSearch(''); searchField.current?.focus(); }} className="colis-secondary">Effacer la recherche</button>

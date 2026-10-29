@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  ARRIVAL_NOTICE_STATES, BROUILLON_STAGES, COLIS_DEFAULT_SORT, COLIS_DEFAULT_TAB, COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_ACTION_LABEL,
+  ARRIVAL_NOTICE_STATES, BROUILLON_STAGES, CLIENT_WAIT_LABEL, COLIS_DEFAULT_SORT, COLIS_DEFAULT_TAB, COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_ACTION_LABEL,
   NOTICE_SEND_CHECK_MINUTES, PAID_TOTAL_STATE, actionAllowed, arrivalNoticeState, arrivalNoticeSummary, brouillonAlerts, brouillonFiche, cartonVolumeM3,
   colisActionHref, colisRow, colisSearchMatch, colisSortKey, colisStage, colisTab, colisTabKey, colisTotals, filterColisRows, formatDimensions, formatKg, formatM3,
   groupColisRowsByDeparture, groupColisRowsByDestination, NO_DESTINATION_GROUP_KEY, orderValidationItems, pendingByClient, pendingByColis, receptionTarget, sortColisRows,
@@ -106,7 +106,7 @@ test('the five sorts, « Par nom » by default, « Par montant » marked financi
 test('the Brouillon steps are those of the specification, in their order', () => {
   assert.deepEqual(BROUILLON_STAGES.map(item => [item.key, item.label]), [
     ['reception_a_valider', 'Réception à valider'], ['mesures_a_completer', 'Mesures à compléter'], ['client_a_repondu', 'Le client a répondu'],
-    ['accord_a_demander', 'Accord à demander'], ['demande_a_verifier', 'Demande à vérifier'], ['attend_client', 'Attend le client'],
+    ['accord_a_demander', 'Accord à demander'], ['demande_a_verifier', 'Demande à vérifier'], ['attend_client', 'Attend son accord'],
     ['client_refuse', 'Le client refuse'], ['produit_interdit', 'Produit interdit à régler'], ['a_preparer', 'À préparer'],
     ['facture_manquante', 'Facture manquante'], ['devis_a_completer', 'Devis à compléter'], ['pret_pour_devis', 'Prêt pour le devis'],
   ]);
@@ -164,7 +164,7 @@ test('« Accord à demander » opens the consent request in place, never asked o
   assert.deepEqual([unrecorded.key, unrecorded.tone, unrecorded.detail, unrecorded.action.key, unrecorded.action.task], ['accord_a_demander', 'review', 'Accord du client à vérifier dans le dossier', 'voir_dossier', 'accord']);
 });
 
-test('« Attend le client »: nothing to do while the request is followed up or the client’s wait runs; « Relancer » once due', () => {
+test('« Attend son accord »: nothing to do while the request is followed up or the client’s wait runs; « Relancer » once due', () => {
   const waiting = { ...measured, statut: 'attente_feu_vert' };
   const read = dossier => { const step = stageOf(dossier); return [step.key, step.detail, step.action && step.action.key]; };
   // Delivered two hours ago: followed up for 24 hours.
@@ -195,7 +195,30 @@ test('« Attend le client »: nothing to do while the request is followed up or 
   assert.equal(relance.tone, 'waiting');
 });
 
-test('« Attend le client » with the automatic reminders: when the next one leaves, « Relancer » only once they are all sent', () => {
+test('the waiting step says what is awaited and how the request left: its agreement, or his other parcels', () => {
+  const waiting = { ...measured, statut: 'attente_feu_vert' };
+  const read = dossier => { const step = stageOf(dossier); return [step.label, step.detail, step.action && step.action.key]; };
+  // The agreement, asked and delivered on Telegram.
+  assert.deepEqual(read({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z')] }),
+    ['Attend son accord', 'Sans réponse · demandé le 26/10/2026', 'relancer']);
+  // Asked by e-mail (a draft: no provider confirms its sending), or in the client space: said, never a bare « Sans réponse ».
+  const email = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z', { canal: 'email', statut: 'envoi', outboxStatus: 'manual', outboxSentAt: null });
+  assert.deepEqual(read({ ...waiting, messages: [email] }), ['Attend son accord', 'Sans réponse · demande préparée par e-mail le 25/10/2026', 'relancer']);
+  const portal = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z', { canal: 'portal', outboxStatus: null, outboxSentAt: null });
+  assert.deepEqual(read({ ...waiting, messages: [portal] }), ['Attend son accord', 'Sans réponse · demande déposée dans son espace le 25/10/2026', 'relancer']);
+  // A Telegram request whose delivery the dossier did not record (former data): at its delivery.
+  assert.deepEqual(read({ ...waiting, messages: [staffMessage('demande_feu_vert', '2026-10-24T08:00:00Z', { outboxSentAt: '2026-10-25T09:00:00Z' })] }),
+    ['Attend son accord', 'Sans réponse · demandé le 25/10/2026', 'relancer']);
+  // No request recorded at all: said so.
+  assert.deepEqual(read(waiting), ['Attend son accord', 'Sans réponse · date de la demande inconnue', 'relancer']);
+  // The client chose to wait for his other parcels: the step says it, until the wait ends, then the accord is asked again.
+  assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-27T10:00:00Z', attenteClientUntil: '2026-11-02T10:00:00Z' }), [CLIENT_WAIT_LABEL, 'Le client attend · jusqu’au 02/11', null]);
+  assert.deepEqual(read({ ...waiting, attenteClientDate: '2026-10-20T10:00:00Z', attenteClientUntil: '2026-10-27T10:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-19T08:00:00Z')] }),
+    [CLIENT_WAIT_LABEL, 'Attente terminée le 27/10 · à réexaminer', 'redemander_accord']);
+  assert.equal(CLIENT_WAIT_LABEL, 'Attend ses autres colis');
+});
+
+test('« Attend son accord » with the automatic reminders: when the next one leaves, « Relancer » only once they are all sent', () => {
   const settings = { relancesAccordAuto: { actif: true, depuis: '2026-10-01T00:00:00Z', premiereApresHeures: 48, suivanteApresHeures: 24, nombreMax: 2 } };
   const linked = { ...flavie, telegramChatId: '7001' };
   const auto = (changes = {}) => ({ settings, getClient: id => (id === flavie.id ? linked : clients.get(id) || null), ...changes });
@@ -296,8 +319,9 @@ test('« Demande à vérifier »: a request or a relance that did not reach the 
   assert.equal(read([delivered, relance({ statut: 'envoi', outboxStatus: null })], { ...byWait, attenteClientUntil: '2026-10-28T08:00:00Z' })[3], 'redemander_accord', 'Without its outbox, left « envoi » by the wait.');
   // Only the latest message counts; an e-mail kept as a draft and a message of the client space are no failure.
   assert.deepEqual(read([request('2026-10-27T08:00:00Z', { statut: 'echec', outboxStatus: 'failed' }), staffMessage('relance_feu_vert', '2026-10-28T08:00:00Z')]), ['attend_client', 'Relancé le 28/10/2026', 'waiting', null]);
-  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: 'manual' })]), ['attend_client', 'Demandé le 28/10/2026', 'waiting', null]);
-  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: null })]), ['attend_client', 'Demandé le 28/10/2026', 'waiting', null]);
+  // An e-mail is a draft (no provider is connected): « préparée », never « demandé ».
+  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: 'manual' })]), ['attend_client', 'Demande préparée par e-mail le 28/10/2026', 'waiting', null]);
+  assert.deepEqual(read([request('2026-10-28T08:00:00Z', { canal: 'email', outboxStatus: null })]), ['attend_client', 'Demande préparée par e-mail le 28/10/2026', 'waiting', null]);
   assert.equal(read([staffMessage('demande_feu_vert', '2026-10-28T08:00:00Z', { canal: 'portal' })])[0], 'attend_client');
   // The right of its channel: an e-mail is checked by whoever writes e-mails.
   const email = stageOf({ ...waiting, messages: [request('2026-10-27T08:00:00Z', { canal: 'email', statut: 'echec', outboxStatus: 'failed' })] });
@@ -526,7 +550,7 @@ test('a task held by a colleague: the step says who, from the team’s tasks; wi
 test('a row gives the client, the cartons received, the step, the total and the departure ready to show', () => {
   const row = colisRow({ ...measured, devisTransport: 70, devisOM: 10 }, ctx());
   assert.deepEqual(Object.keys(row).sort(), ['action', 'cartons', 'cartonsLabel', 'casier', 'casierLabel', 'clientId', 'clientKnown', 'clientName', 'clientRef', 'clientType', 'clientTypeLabel', 'commune',
-    'departure', 'destinationCode', 'destinationLabel', 'dimensions', 'ficheHref', 'forfait', 'forfaitLabel', 'id', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchCodes', 'searchText',
+    'departure', 'destinationCode', 'destinationLabel', 'destinationName', 'dimensions', 'ficheHref', 'forfait', 'forfaitLabel', 'id', 'identity', 'lastReceivedAt', 'lastReceivedLabel', 'pendingCartons', 'poids', 'poidsLabel', 'ref', 'searchCodes', 'searchText',
     'stage', 'statut', 'tab', 'total', 'volume', 'volumeLabel', 'zone', 'zoneLabel'].sort());
   assert.deepEqual([row.id, row.ref, row.statut, row.tab, row.clientId, row.clientName, row.clientType, row.clientTypeLabel, row.destinationCode, row.destinationLabel, row.commune],
     ['d-1', 'EXP-AAA111', 'mesure', 'brouillon', 'c-flavie', 'PAYET Flavie', 'particulier', 'Particulier', '974', 'Réunion', 'Sainte-Clotilde']);
@@ -661,8 +685,8 @@ test('the search finds a dossier by its expedition: the departure’s reference 
   assert.equal(match('d-1', '6A12345678901'), 'Suivi 6A 123 456 789 01 · carton 1');
   assert.equal(match('d-1', 'cb998877665fr'), 'Suivi CB998877665FR · carton 2');
   assert.equal(match('d-2', '1Z999AA'), 'Suivi 1Z999AA10123456784 · carton 1', 'Part of the number.');
-  assert.equal(match('d-2', 'exp-bbb222'), 'Dossier EXP-BBB222');
-  assert.equal(match('d-2', 'bbb222'), 'Dossier EXP-BBB222');
+  assert.equal(match('d-2', 'exp-bbb222'), 'N° d’envoi EXP-BBB222');
+  assert.equal(match('d-2', 'bbb222'), 'N° d’envoi EXP-BBB222');
   assert.equal(match('d-2', 'EXP-BBB222-1-2'), 'Colis 1/2 · EXP-BBB222', 'A parcel label scanned.');
   assert.equal(match('d-1', 'payet'), null, 'A name: the line says it already.');
   assert.equal(match('d-1', '6A'), null, 'Too short to be a number.');
@@ -788,8 +812,8 @@ test('« Par destination » groups by destination, Réunion, Mayotte, Guadeloupe
   const groups = groupColisRowsByDestination(rows);
   // La Réunion by delivery zone: Nord (97400) before Sud (97410).
   assert.deepEqual(groups.map(group => [group.key, group.code, group.zone, group.label, group.rows.map(row => row.id)]), [
-    ['destination:974:NORD', '974', 'NORD', 'Réunion · Nord', ['d-durand', 'd-payet']],
-    ['destination:974:SUD', '974', 'SUD', 'Réunion · Sud', ['d-ebrard']],
+    ['destination:974:NORD', '974', 'NORD', 'Réunion · zone Nord', ['d-durand', 'd-payet']],
+    ['destination:974:SUD', '974', 'SUD', 'Réunion · zone Sud', ['d-ebrard']],
     ['destination:976', '976', null, 'Mayotte', ['d-hoarau']],
     ['destination:971', '971', null, 'Guadeloupe', ['d-lea']],
     [NO_DESTINATION_GROUP_KEY, null, null, 'Destination à vérifier', ['d-adam', 'd-martin']],
@@ -804,7 +828,7 @@ test('« Par destination » groups by destination, Réunion, Mayotte, Guadeloupe
   const unzoned = at({ ...measured, id: 'd-unzoned', clientId: 'c-unzoned' });
   assert.equal(unzoned.zone, null);
   assert.deepEqual(groupColisRowsByDestination([rows[6], { ...unzoned, destinationCode: '974' }]).map(group => [group.key, group.label]),
-    [['destination:974:SUD', 'Réunion · Sud'], ['destination:974', 'Réunion']]);
+    [['destination:974:SUD', 'Réunion · zone Sud'], ['destination:974', 'Réunion']]);
   assert.equal(rows[0].id, 'd-payet');
   assert.deepEqual(groupColisRowsByDestination([]), []);
 });
@@ -997,7 +1021,10 @@ test('a validation files its notice on a dossier that still requests its purchas
 test('the sheet: header, cartons received with those to validate, one action and the links', () => {
   const sheet = brouillonFiche(measured, ctx({ pending: pendingByColis([pendingEntry('d-1', [2])]) }));
   assert.deepEqual(sheet.header, { ref: 'EXP-AAA111', clientName: 'PAYET Flavie', clientTypeLabel: 'Particulier', destinationLabel: 'Réunion', commune: 'Sainte-Clotilde',
-    zone: 'NORD', zoneLabel: 'Nord', clientRef: null, forfaitLabel: null, casier: 'B12', casierLabel: 'Casier B12', stage: sheet.stage });
+    zone: 'NORD', zoneLabel: 'Nord', clientRef: null, forfaitLabel: null, casier: 'B12', casierLabel: 'Casier B12', stage: sheet.stage,
+    // Every fact the sheet names with its word (domain/dossierIdentity.js): no client number nor plan on this client.
+    identity: { ref: 'EXP-AAA111', casier: 'B12', clientRef: null, clientTypeLabel: 'Particulier', forfaitLabel: null, destinationCode: '974', destinationLabel: 'Réunion',
+      destinationName: 'La Réunion', commune: 'Sainte-Clotilde', zone: 'NORD', zoneLabel: 'Nord' } });
   assert.equal(sheet.stage.key, 'reception_a_valider');
   assert.deepEqual(sheet.action, { key: 'valider_reception', label: 'Valider la réception', task: null, ...RECEIVE, href: '/recevoir?client=c-flavie&valider=1' });
   assert.deepEqual(sheet.received.cartons.map(carton => [carton.number, carton.supplierLabel, carton.trackingLabel, carton.dimensionsLabel, carton.poidsLabel, carton.volumeLabel, carton.receivedLabel, carton.pending]), [

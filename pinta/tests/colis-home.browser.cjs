@@ -235,7 +235,7 @@ registerRequestMock(({ url, method, input, tables }) => {
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const tabs = f => f.page.getByRole('navigation', { name: 'Étapes des colis', exact: true });
-const SEARCH_LABEL = 'Chercher par nom, numéro de colis, numéro de suivi ou numéro d’expédition';
+const SEARCH_LABEL = 'Chercher par nom, numéro d’envoi, numéro de suivi, numéro d’expédition ou numéro client';
 const rowOf = (f, id) => f.page.locator(`[data-colis-row="${id}"]`);
 const namesInOrder = f => f.page.locator('[data-colis-name]').evaluateAll(links => links.map(link => link.textContent.trim()));
 /** Waits until the list shows these clients, in this order (a sort is applied on the next render). */
@@ -407,7 +407,7 @@ async function main() {
       await waitForOrder(f, ['Abdallah Mohamed', 'Boyer Sandrine', 'Grondin Jean', 'Hoarau Jean-Marc', 'Payet Flavie', 'Rivière Marie-Claude', 'Técher Johnny']); // « Par nom » by default
       // One step and one action (or « Rien à faire ») per dossier.
       const expected = {
-        abdallah: ['Accord à demander', 'Jamais demandé', 'button', 'Demander l’accord'], boyer: ['Attend le client', 'Sans réponse', 'button', 'Relancer'],
+        abdallah: ['Accord à demander', 'Jamais demandé', 'button', 'Demander l’accord'], boyer: ['Attend son accord', 'Sans réponse', 'button', 'Relancer'],
         grondin: ['Prêt pour le devis', 'Devis enregistré', 'link', 'Envoyer le devis'], hoarau: ['Facture manquante', '', 'link', 'Ajouter la facture'],
         payet: ['À préparer', 'Accord donné le', 'link', 'Préparer'], riviere: ['Prêt pour le devis', '', 'link', 'Envoyer le devis'],
         techer: ['Réception à valider', '1 carton à valider', 'link', 'Valider la réception'],
@@ -514,10 +514,10 @@ async function main() {
       await f.page.locator('.colis-group-row').nth(5).waitFor();
       const groups = await f.page.locator('.colis-group-row').evaluateAll(rows => rows.map(row => row.innerText.replace(/\s+/g, ' ').trim()));
       assert.equal(groups.length, 6, groups.join('\n'));
-      assert.match(groups[0], /^Réunion · Nord 1 client · \d+ cartons? · /);
-      assert.match(groups[1], /^Réunion · Est 1 client · 5 cartons · /);
-      assert.match(groups[2], /^Réunion · Ouest 1 client · \d+ cartons? · /);
-      assert.match(groups[3], /^Réunion · Sud 3 clients · \d+ cartons · /);
+      assert.match(groups[0], /^Réunion · zone Nord 1 client · \d+ cartons? · /);
+      assert.match(groups[1], /^Réunion · zone Est 1 client · 5 cartons · /);
+      assert.match(groups[2], /^Réunion · zone Ouest 1 client · \d+ cartons? · /);
+      assert.match(groups[3], /^Réunion · zone Sud 3 clients · \d+ cartons · /);
       assert.match(groups[4], /^Mayotte 1 client · 1 carton · 2,1 kg · 0,012 m³ · prix à calculer$/);
       assert.match(groups[5], /^Destination à vérifier 1 client · 1 carton · 1,5 kg · 0,006 m³ · prix à calculer$/);
       assert.equal(await f.page.locator('.colis-group-row[data-none="true"]').count(), 1, 'The destinations to check in the colour of what is to check.');
@@ -595,7 +595,7 @@ async function main() {
     await scenario('search-by-expedition-and-dimensions', async f => {
       await openHome(f);
       const search = f.page.getByLabel(SEARCH_LABEL, { exact: true });
-      assert.equal(await search.getAttribute('placeholder'), 'Nom, n° de colis ou d’expédition');
+      assert.equal(await search.getAttribute('placeholder'), 'Nom, n° d’envoi ou d’expédition');
       // The reference of a departure: every dossier it carries, each line saying what it was found by.
       await search.fill('ENV-TEST-01');
       await f.page.waitForURL(url => url.searchParams.get('q') === 'ENV-TEST-01');
@@ -654,7 +654,10 @@ async function main() {
         await setTheme(f, theme);
         await openHome(f, '?classer=nom');
         const name = rowOf(f, D.riviere).locator('th');
-        assert.match(await flat(name), /^Rivière Marie-Claude RÉUNION, ZONE EST Saint-Benoît Numéro client CLT319437 · Forfait Premium Annuel$/, `${width}`);
+        // Each fact with its word (team request of 29 October): « Zone EST », « N° client … », « Forfait … ».
+        assert.match(await flat(name), /^Rivière Marie-Claude Réunion, Zone EST Saint-Benoît N° client CLT319437 Forfait Premium Annuel$/, `${width}`);
+        // A number is never split at its hyphen: on a phone it goes whole to the next line.
+        assert.equal(await name.locator('[data-client-meta="ref"] .colis-code').evaluate(code => code.getClientRects().length), 1, `${width}`);
         // The zone and its place on one line where the column allows it (a computer); the tag never breaks.
         if (width >= 1024) assert.equal(await name.locator('.colis-sub').first().evaluate(line => line.getBoundingClientRect().height < 30), true, `${width}`);
         assert.equal(await name.locator('.colis-zone').evaluate(tag => tag.getClientRects().length), 1, `${width}`);
@@ -676,8 +679,20 @@ async function main() {
       await f.page.goto(`${base}/brouillon/${D.riviere}`);
       const sheet = f.page.getByTestId('brouillon-fiche');
       await sheet.locator('header').waitFor();
-      assert.match(await flat(sheet.locator('header')), /Réunion · Saint-Benoît ZONE EST · Particulier · Casier C-03 · EXP-TEST-106 Numéro client CLT319437 · Forfait Premium Annuel/);
+      assert.match(await flat(sheet.locator('header')), /N° D’ENVOI EXP-TEST-106 CASIER C-03 LIVRAISON Saint-Benoît · Zone EST · La Réunion CLIENT N° CLT319437 · Particulier FORFAIT Premium Annuel$/);
       await assertAccessible(f, 'zone on the sheet');
+      // The shipment's facts and its client's: under each other on a phone, side by side on a computer; read at 15 px.
+      const lists = sheet.getByTestId('identity-facts').locator(':scope > dl');
+      const boxes = async () => Promise.all([lists.nth(0).boundingBox(), lists.nth(1).boundingBox()]);
+      let [envoi, owner] = await boxes();
+      assert.ok(owner.y >= envoi.y + envoi.height - 1, `Phone: the client under the shipment (${JSON.stringify([envoi, owner])}).`);
+      await assertReadable(f, 'identity on the sheet, phone');
+      await f.page.setViewportSize({ width: 1440, height: 900 });
+      await f.page.waitForFunction(() => { const [a, b] = document.querySelectorAll('[data-testid="identity-facts"] > dl'); return b && b.getBoundingClientRect().left > a.getBoundingClientRect().right; });
+      [envoi, owner] = await boxes();
+      assert.ok(owner.x >= envoi.x + envoi.width && Math.abs(owner.y - envoi.y) <= 4, `Computer: the client beside the shipment (${JSON.stringify([envoi, owner])}).`);
+      await assertReadable(f, 'identity on the sheet, computer');
+      await shot(f, 'fiche-identite-bureau', false);
       noSend(f);
     }, { prepare: f => {
       Object.assign(f.tables.clients.find(row => row.id === CLIENT.riviere), { ref: 'CLT319437', abonnement: 'premium_annuel' });
@@ -693,7 +708,7 @@ async function main() {
         { client: { telegramChatId: 'chat-boyer', cp: f.tables.clients.find(row => row.id === CLIENT.boyer).cp }, settings: f.tables.app_settings[0].value, now: Date.now() });
       await openHome(f, '?classer=nom');
       const row = rowOf(f, D.boyer);
-      await row.getByText('Attend le client', { exact: true }).waitFor();
+      await row.getByText('Attend son accord', { exact: true }).waitFor();
       assert.match(await flat(row), new RegExp(`Demandé le ${reunionDay(Date.parse(ago(0, 20)))} · relance auto le ${reunionDay(Date.parse(plan.nextAt))}`));
       assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0, 'Nothing to do: the reminder leaves on its own.');
       await row.locator('.colis-nothing').getByText('Rien à faire', { exact: true }).waitFor();
@@ -765,7 +780,7 @@ async function main() {
       assert.deepEqual([queued.p_colis_id, queued.p_template, queued.p_canal, queued.p_expected_consent_version], [D.abdallah, 'demande_feu_vert', 'telegram', 0]);
       assert.ok(queued.p_reply_markup.inline_keyboard.some(line => line.some(button => button.callback_data === `fv_oui_${D.abdallah}`)));
       assert.deepEqual(f.tables.telegram_calls.map(call => [call.colisId, call.messageId]), [[D.abdallah, f.tables.messages[f.tables.messages.length - 1].id]]);
-      await row.getByText('Attend le client', { exact: true }).waitFor();
+      await row.getByText('Attend son accord', { exact: true }).waitFor();
       assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0, 'No relance right after the request.');
       assert.equal(await row.getByRole('link', { name: 'Abdallah Mohamed', exact: true }).evaluate(element => element === document.activeElement), true, 'The focus returns to the line.');
       await shot(f, 'colis-tablette-accord-envoye', false);
@@ -804,7 +819,7 @@ async function main() {
       await sheet.waitFor({ state: 'detached' });
       await row.getByText('Relance envoyée : Telegram a confirmé', { exact: true }).waitFor();
       assert.deepEqual(f.tables.queue_calls.map(call => [call.p_colis_id, call.p_template, call.p_expected_consent_version]), [[D.boyer, 'relance_feu_vert', 1]]);
-      await row.getByText('Attend le client', { exact: true }).waitFor();
+      await row.getByText('Attend son accord', { exact: true }).waitFor();
       assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0);
     }, { device: PHONE, theme: 'dark' });
 
@@ -923,7 +938,7 @@ async function main() {
         assert.deepEqual(await sort.locator('option').allInnerTexts(), ['Par nom', 'Par date d’envoi', 'Par destination', 'Par réception', 'Par montant']);
         const table = f.page.getByRole('table', { name: 'Brouillon, classé par nom', exact: true });
         assert.deepEqual((await table.locator('thead th').allInnerTexts()).map(text => text.trim().toLowerCase()), ['client', 'colis', 'où en est-on', 'total à payer', 'action']);
-        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou Numéro client CLI-ABDALLAH · Forfait Freemium 1 carton · casier D-04 2,1 kg · 0,012 m³ 30 × 20 × 20 cm Accord à demander Jamais demandé À calculer Demander l’accord$/);
+        assert.match(await flat(rowOf(f, D.abdallah)), /^Abdallah Mohamed Mayotte · Mamoudzou N° client CLI-ABDALLAH Forfait Freemium 1 carton · casier D-04 2,1 kg · 0,012 m³ 30 × 20 × 20 cm Accord à demander Jamais demandé À calculer Demander l’accord$/);
         // The client's name opens the sheet.
         assert.equal(await rowOf(f, D.payet).getByRole('link', { name: 'Payet Flavie', exact: true }).getAttribute('href'), `/brouillon/${D.payet}?returnTo=%2F`);
         // The table scrolls in its frame; the page never does. Its right edge is shaded while columns hide there.
@@ -1019,7 +1034,8 @@ async function main() {
         await f.page.getByTestId('fiche-avis').getByText('À envoyer', { exact: true }).waitFor();
         assert.ok(f.tables.signal_calls.some(call => call.rpc === 'list_arrival_notices' && call.input.p_colis_id === D.riviere && call.input.p_limit === 50));
         assert.ok(f.tables.signal_calls.some(call => call.rpc === 'list_pending_receptions' && call.input.p_client_id === CLIENT.riviere));
-        assert.match(await flat(sheet.locator('header')), /Réunion · Saint-Benoît ZONE EST · Particulier · Casier C-03 · EXP-TEST-106 Numéro client CLI-RIVIÈRE · Forfait Freemium Prêt pour le devis/);
+        // The client, where the dossier is, then each fact with its word: the shipment, then its client.
+        assert.match(await flat(sheet.locator('header')), /^Rivière Marie-Claude Prêt pour le devis .*N° D’ENVOI EXP-TEST-106 CASIER C-03 LIVRAISON Saint-Benoît · Zone EST · La Réunion CLIENT N° CLI-RIVIÈRE · Particulier FORFAIT Freemium$/);
         // The price of the saved quote: transport and its billed weight, the import taxes and their detail, the total, the saving.
         const action = f.page.getByTestId('fiche-action');
         await action.getByRole('heading', { name: 'Prix à payer', exact: true }).waitFor();

@@ -1,4 +1,6 @@
 import React from 'react';
+import { IDENTITY_LABELS } from '../../domain/dossierIdentity';
+import './zoneTag.css';
 
 /** Where the dossier is, in the team's words (colisStage): the pill's colour follows its step or its tone. */
 export default function StagePill({ stage, notice = null, className = '' }) {
@@ -6,21 +8,21 @@ export default function StagePill({ stage, notice = null, className = '' }) {
   return <span className={`colis-pill ${className}`} data-stage={notice ? undefined : stage.key} data-notice={notice || undefined} data-tone={stage.tone || 'neutral'}>{stage.label}</span>;
 }
 
-/** The delivery zone of La Réunion (« NORD », « SUD »…), one colour per zone, the word always written. `region`:
- * the destination it stands for when the line does not name it (« Réunion, zone Sud » for a screen reader). */
+/** The delivery zone of La Réunion with its word, « Zone EST », one colour per zone (as in SunApps, the zone's name in
+ * capitals). `region`: the destination it stands for when the line does not name it (« Réunion, Zone Est » for a
+ * screen reader). */
 export function ZoneTag({ zone, label, region = '' }) {
   if (!zone || !label) return null;
-  return <span className="colis-zone" data-zone={zone}><span className="sr-only">{region ? `${region}, zone ` : 'Zone '}</span>{label}</span>;
+  return <span className="colis-zone" data-zone={zone}>{region && <span className="sr-only">{region}, </span>}{IDENTITY_LABELS.zone} <span className="colis-zone-name">{label}</span></span>;
 }
 
-/** « CLT174737 · Premium Annuel »: the client number and the plan, when known. */
+/** « N° client CLT174737 » and « Forfait Premium Annuel », each on its line with its word, when known. */
 export function ClientMeta({ clientRef, forfaitLabel, className = 'colis-sub' }) {
   if (!clientRef && !forfaitLabel) return null;
-  return <span className={className} data-client-meta="">
-    {clientRef && <><span className="sr-only">Numéro client </span><span className="colis-code">{clientRef}</span></>}
-    {clientRef && forfaitLabel ? ' · ' : ''}
-    {forfaitLabel && <><span className="sr-only">Forfait </span>{forfaitLabel}</>}
-  </span>;
+  return <>
+    {clientRef && <span className={className} data-client-meta="ref">{IDENTITY_LABELS.clientRef} <span className="colis-code keep-token">{clientRef}</span></span>}
+    {forfaitLabel && <span className={className} data-client-meta="forfait">{IDENTITY_LABELS.forfait} {forfaitLabel}</span>}
+  </>;
 }
 
 /** « 7 clients · 19 cartons · 40,6 kg · 0,441 m³ » from colisTotals: a weight or a volume is shown only when
