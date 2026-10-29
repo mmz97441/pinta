@@ -192,7 +192,7 @@ Migration `20261010000001_history_retention.sql`, préparée et vérifiée local
 
 ## Réception validée et avis d’arrivée groupé — 28 octobre 2026
 
-Migration `20261028000001_reception_validation.sql`, vérifiée localement, **non déployée**, complétée le même jour après la relecture indépendante (ses cas de preuve sont devenus des tests de la suite). Contrat : section « Base de données : réception validée et avis d’arrivée » de `docs/specification-brouillon-reception-2026-10-28.md`. Fonctions côté écran : `src/expedile/lib/receptionValidation.js`.
+Migration `20261028000001_reception_validation.sql`, complétée le même jour après la relecture indépendante (ses cas de preuve sont devenus des tests de la suite), appliquée en production le 28 octobre 2026 (point de départ des validations : 19 h 09 UTC, constaté le 29 octobre). Contrat : section « Base de données : réception validée et avis d’arrivée » de `docs/specification-brouillon-reception-2026-10-28.md`. Fonctions côté écran : `src/expedile/lib/receptionValidation.js`.
 
 **Décisions.**
 
@@ -229,7 +229,7 @@ Migration `20261028000001_reception_validation.sql`, vérifiée localement, **no
 
 ## Accord automatique — 29 octobre 2026
 
-Migration `20261029000001_consent_automation.sql`, module Edge `_shared/consentReminders.ts` et fonction `relances-auto`, vérifiés localement, **non déployés**. Contrat : section « Accord automatique » de `docs/specification-brouillon-reception-2026-10-28.md`. Demande de l'équipe : automatiser au maximum l'accord du client (avis et demande en un message, relances 48 h puis 24 h).
+Migration `20261029000001_consent_automation.sql`, module Edge `_shared/consentReminders.ts` et fonction `relances-auto`, en production depuis le 29 octobre 2026 (détail ci-dessous). Contrat : section « Accord automatique » de `docs/specification-brouillon-reception-2026-10-28.md`. Demande de l'équipe : automatiser au maximum l'accord du client (avis et demande en un message, relances 48 h puis 24 h).
 
 **Décisions.**
 
@@ -240,10 +240,13 @@ Migration `20261029000001_consent_automation.sql`, module Edge `_shared/consentR
 - **Texte par défaut de la relance** réécrit (il nommait « OUI / ATTENDRE / NON », que les boutons ne portent pas, et `{{desc}}` souvent vide). Aucun modèle `relance_feu_vert` n'est enregistré en production (vérifié le 29 octobre) : le nouveau texte par défaut s'appliquera. Modèles ajoutés : `arrivee_colis_accord_telegram`, `arrivee_colis_accord_facture_telegram` (copies navigateur et Edge identiques).
 - **Aucune fonction existante redéfinie** hors `validate_reception`, `_reception_validation_result` et `list_arrival_notices`. Aucun déclencheur ajouté. Les aides privées (`_consent_cartons_measured`, `_consent_task_free`, `_consent_buttons`) ne sont exécutables par aucun rôle de l'API.
 
-**Mise en production (à faire avec l'accord du responsable).**
+**Mise en production — 29 octobre 2026, avec l'accord du responsable.** Ordre : base, puis fonction, puis écran (l'écran envoie `p_consent_text`, que l'ancienne commande refuserait).
 
-1. Appliquer la migration `20261029000001_consent_automation.sql`.
-2. Déployer `relances-auto`, puis les fonctions qui embarquent `_shared/messageDefaults.ts` modifié : `client-invoice-deposit`, `invoice-quote-withdrawal`, `telegram-inbox-assign`, `telegram-webhook` ; comparer les sources déployées (`compare_edge_sources.cjs`).
-3. Fusionner l'écran sur `main` (déploiement Vercel) seulement après les étapes 1 et 2 : l'écran envoie `p_consent_text`, que l'ancienne commande refuserait.
+1. **Contrôle préalable.** Les 222 fonctions `public` du dépôt (état `20261028000001`) sont identiques en production (empreinte md5 de `pg_get_functiondef`). La production en compte trois de plus, absentes du dépôt et laissées telles quelles : `fn_check_abonnement_actif`, `fn_cleanup_old_locks`, `fn_generer_alertes_abonnement`.
+2. **Migration, 06 h 55 UTC.** Le connecteur de production refuse toute suppression sans confirmation interactive : d'où le renommage ci-dessus, et une application en un seul bloc `DO`. Ce bloc refuse un texte dont l'empreinte diffère du fichier (`3087a6b72793ce43dfc951eebfe7c746`), l'exécute, l'inscrit dans `supabase_migrations.schema_migrations`, puis contrôle l'empreinte des huit fonctions, leurs droits et le réglage ; le moindre écart annule tout. Répété d'abord sur une base locale au même état : résultat identique à l'application du fichier par `psql`, texte modifié d'un caractère refusé avant toute exécution, second passage refusé. Constat en production : huit fonctions identiques à la référence locale, droits attendus, `relancesAccordAuto` actif depuis `2026-10-29T06:55:26Z`, historique des migrations à jour.
+3. **`relances-auto`, version 23, 06 h 59 UTC.** Les onze fichiers déployés, téléchargés, sont identiques octet pour octet au commit `0666923`. Passage planifié de 07 h 00 UTC : HTTP 200, `remindersMode: "auto"`, aucune relance due (aucune demande remise depuis la mise en service).
+4. **Non redéployées :** `client-invoice-deposit`, `invoice-quote-withdrawal`, `telegram-inbox-assign`, `telegram-webhook`. Leur copie de `_shared/messageDefaults.ts` ne diffère que par des textes qu'elles n'envoient pas (`relance_feu_vert_telegram`, `arrivee_colis_accord*`) : aucun changement de comportement ; la parité revient à leur prochain déploiement.
+5. **Conseiller de sécurité Supabase.** Les trois aides rejoignent l'avertissement existant « search_path modifiable » (26 fonctions) ; elles ne sont exécutables par aucun rôle de l'API. `validate_reception` garde l'avertissement des commandes `SECURITY DEFINER` ouvertes à `authenticated`, comme sa version précédente.
+6. **Écran, 07 h 44 UTC.** `main` avancé par avance rapide de `abefa94` à `0666923` après la CI verte de ce commit sur la branche ; déploiement Vercel de production `dpl_2efkoNrsBAKK7WVXqp8WFVb6Ts7H` à l'état READY. `expedile.app` sert le nouveau code (marqueurs `p_consent_text`, `consentAsked` et « relance auto » présents dans les fichiers servis).
 
 **Vérification locale.** PostgreSQL 17 isolé : `supabase/tests/run-consent-automation.sh` (forme, avis avec accord et rejeu, chaque cas d'avis simple dont le lot partiel, refus, relances dues), et les étapes SQL de la CI ; tests Edge (`consent-reminders.test.cjs`, `edge.test.cjs`), `npm test` (`domain/consentReminders.test.js`, `arrival-notice-messages.test.mjs`, `reception-validation-client.test.mjs`), suites navigateur `reception-flow`, `colis-home`, `admin-simplicity`.
