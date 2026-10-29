@@ -4,7 +4,7 @@
 export const PERMISSION_CATEGORIES = [
   {
     key: 'colis', label: 'Colis', permissions: [
-      { key: 'perm_colis_receptionner', label: 'Réceptionner un colis' },
+      { key: 'perm_colis_receptionner', label: 'Réceptionner des cartons' },
       { key: 'perm_colis_mesurer', label: 'Mesurer / peser' },
       { key: 'perm_colis_modifier_dims', label: 'Modifier les dimensions après réception' },
       { key: 'perm_colis_demander_feuvert', label: 'Demander le feu vert' },
