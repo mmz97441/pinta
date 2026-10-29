@@ -73,6 +73,7 @@ jobs:
           sh ./supabase/tests/run-client-planned-departure.sh
           sh ./supabase/tests/run-loading-checks.sh
           sh ./supabase/tests/run-reception-validation.sh
+          sh ./supabase/tests/run-consent-automation.sh
           sh ./supabase/tests/run-retention.sh
       - run: npx playwright install --with-deps chromium
       - name: Parcours navigateur sans services externes
@@ -122,7 +123,7 @@ jobs:
           node tests/task-claim.browser.cjs || failed_suites="$failed_suites task-claim.browser.cjs"
           node tests/collaborative-work.browser.cjs || failed_suites="$failed_suites collaborative-work.browser.cjs"
           node tests/reception-without-notification.browser.cjs || failed_suites="$failed_suites reception-without-notification.browser.cjs"
-          # Brouillon simplifié (28 octobre 2026) : écrans Colis et Fiche Brouillon, réception en quatre étapes et avis d’arrivée.
+          # Brouillon simplifié (28-29 octobre 2026) : écrans Colis et Fiche Brouillon, réception en trois étapes, avis d’arrivée et accord automatique.
           PINTA_COLIS_HOME_OUT=/tmp/pinta-colis-home node tests/colis-home.browser.cjs || failed_suites="$failed_suites colis-home.browser.cjs"
           PINTA_RECEPTION_FLOW_OUT=/tmp/pinta-reception-flow node tests/reception-flow.browser.cjs || failed_suites="$failed_suites reception-flow.browser.cjs"
           node tests/client-lightweight.browser.cjs || failed_suites="$failed_suites client-lightweight.browser.cjs"

@@ -9,6 +9,7 @@ import useShellLoadBanner from '../../hooks/useShellLoadBanner';
 import { workspaceReturnPath } from '../../domain/navigation';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { PAID_TOTAL_STATE, brouillonFiche, colisTab, pendingByColis } from '../../domain/brouillon';
+import { openConversationClients } from '../../domain/consentReminders';
 import { formatDossierTableDate } from '../../domain/dossierTable';
 import { SecureImage } from '../ui/SecureFile';
 import ColisAction from './ColisAction';
@@ -199,8 +200,10 @@ export default function BrouillonFiche() {
   // `actions`, `me`, `teamUsers`: who holds each task (the step's `heldBy`). `tarifs` and `categories` once loaded
   // only (empty while the data load runs or after it failed): what the quote misses is checked against them.
   const me = auth?.u || null;
-  const ctx = useMemo(() => ({ client, envois, settings, pending: pendingIndex, notices: signals.notices || [], can, now, actions: workActions, me, teamUsers, ...(sbReady ? { tarifs, categories } : {}) }),
-    [client, envois, settings, pendingIndex, signals.notices, can, now, workActions, me, teamUsers, sbReady, tarifs, categories]);
+  // A conversation of the client waiting for the team suspends the automatic reminders of all his dossiers.
+  const conversations = useMemo(() => openConversationClients(data), [data]);
+  const ctx = useMemo(() => ({ client, envois, settings, pending: pendingIndex, notices: signals.notices || [], can, now, actions: workActions, me, teamUsers, openConversationClients: conversations, ...(sbReady ? { tarifs, categories } : {}) }),
+    [client, envois, settings, pendingIndex, signals.notices, can, now, workActions, me, teamUsers, conversations, sbReady, tarifs, categories]);
   const fiche = useMemo(() => inColis ? brouillonFiche(dossier, ctx) : null, [inColis, dossier, ctx]);
   const rawNotice = fiche?.notice ? (signals.notices || []).find(item => item.id === fiche.notice.id) || null : null;
   useDocumentTitle(fiche ? fiche.header.clientName : 'Fiche Brouillon');

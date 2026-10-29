@@ -114,7 +114,8 @@ export function normalizeNoticeOutbox(raw) {
   };
 }
 
-/** validate_reception → { validation, message, outbox, reused }. message and outbox are null without notice. */
+/** validate_reception → { validation, message, outbox, consentAsked, reused }. message and outbox are null without
+ *  notice; consentAsked: the notice also asked the client's agreement. */
 export function normalizeValidationResult(data) {
   const validation = data?.validation;
   if (!validation?.id) throw new Error('La validation de la réception n’a pas été confirmée. Actualisez la liste avant de recommencer.');
@@ -132,6 +133,8 @@ export function normalizeValidationResult(data) {
     },
     message: normalizeNoticeMessage(data.message),
     outbox: normalizeNoticeOutbox(data.outbox),
+    // The notice also asked the client's agreement (its message is the consent request, template demande_feu_vert).
+    consentAsked: data.consentAsked === true,
     reused: data.reused === true,
   };
 }
@@ -226,8 +229,11 @@ export function receptionPhotoRequest({ colisId, carton, path } = {}) {
 
 /** The arguments of validate_reception. Without notice, channel, template and text are not sent (the server refuses
  *  them). With a notice, the channel is the one the screen computed with the server's rule (Telegram when linked, else
- *  the e-mail): a different decision on the server means the contact changed (40001, reload). */
-export function validationRequest({ clientId, items, notify, canal = null, template = null, text: body = null, requestId = null } = {}) {
+ *  the e-mail): a different decision on the server means the contact changed (40001, reload). `consentText`: the
+ *  notice that also asks the agreement (renderConsentNotice), on Telegram only; the server sends it instead of `text`
+ *  when it can ask the agreement with the notice. Left out of the call when absent (the request of an earlier
+ *  version, which the server replays as it was). */
+export function validationRequest({ clientId, items, notify, canal = null, template = null, text: body = null, requestId = null, consentText = null } = {}) {
   if (typeof clientId !== 'string' || !UUID.test(clientId)) throw invalid('Choisissez le client de la réception.');
   if (typeof notify !== 'boolean') throw invalid('Indiquez si le client doit être prévenu.');
   if (requestId != null && (typeof requestId !== 'string' || !UUID.test(requestId))) throw invalid('Identifiant de validation invalide.');
@@ -235,13 +241,21 @@ export function validationRequest({ clientId, items, notify, canal = null, templ
     p_client_id: clientId, p_items: validationItems(items), p_notify: notify,
     p_canal: null, p_template: null, p_text: null, p_request_id: requestId || randomId(),
   };
-  if (!notify) return args;
+  if (!notify) {
+    if (consentText != null) throw invalid('Sans avis, ne transmettez ni canal, ni modèle, ni texte.');
+    return args;
+  }
   if (!ARRIVAL_CHANNELS.includes(canal)) throw invalid('Précisez le canal de l’avis d’arrivée : telegram ou email.');
   if (!ARRIVAL_TEMPLATES.includes(template)) throw invalid('Choisissez le modèle de l’avis d’arrivée : arrivee_colis ou arrivee_colis_facture.');
   // Counted in characters, as the server counts them (an emoji is one).
   if (typeof body !== 'string' || !body.trim() || Array.from(body).length > MAX_NOTICE_LENGTH)
     throw invalid('Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.');
-  return { ...args, p_canal: canal, p_template: template, p_text: body };
+  const notice = { ...args, p_canal: canal, p_template: template, p_text: body };
+  if (consentText == null) return notice;
+  if (canal !== 'telegram') throw invalid('La demande d’accord part avec l’avis sur Telegram seulement.');
+  if (typeof consentText !== 'string' || !consentText.trim() || Array.from(consentText).length > MAX_NOTICE_LENGTH)
+    throw invalid('Le texte de l’avis avec la demande d’accord doit contenir de 1 à 4096 caractères.');
+  return { ...notice, p_consent_text: consentText };
 }
 
 // ── Server calls ────────────────────────────────────────────────────
@@ -258,8 +272,8 @@ export async function fetchPendingReceptions({ clientId = null } = {}) {
  *  and sends nothing more; the same identifier with another content is refused (40001). A Telegram notice is pending:
  *  send it with deliverMessage(message.colisId, message.id), otherwise the scheduled worker sends it; an e-mail notice
  *  stays manual (text ready to copy). */
-export async function validateReception({ clientId, items, notify, canal, template, text, requestId } = {}) {
-  const args = validationRequest({ clientId, items, notify, canal, template, text, requestId });
+export async function validateReception({ clientId, items, notify, canal, template, text, requestId, consentText = null } = {}) {
+  const args = validationRequest({ clientId, items, notify, canal, template, text, requestId, consentText });
   const { data, error } = await supabase.rpc('validate_reception', args);
   if (error) throw error;
   return normalizeValidationResult(data);

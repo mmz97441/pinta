@@ -683,6 +683,38 @@ async function main() {
       Object.assign(f.tables.clients.find(row => row.id === CLIENT.riviere), { ref: 'CLT319437', abonnement: 'premium_annuel' });
     } });
 
+    // The automatic reminders of the agreement (20261029000001): the line says when the next one leaves, nothing to do;
+    // « Relancer » comes back once they are all sent and followed up.
+    await scenario('automatic-reminder-on-the-line', async f => {
+      const { autoReminderPlan } = await import('../src/expedile/domain/consentReminders.js');
+      const reunionDay = instant => new Intl.DateTimeFormat('fr-FR', { timeZone: 'Indian/Reunion', day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(instant));
+      const boyer = f.tables.colis.find(row => row.id === D.boyer);
+      const plan = autoReminderPlan({ ...boyer, statut: 'attente_feu_vert', clientId: CLIENT.boyer, messages: [{ type: 'staff', template: 'demande_feu_vert', canal: 'telegram', createdAt: ago(0, 20), outboxStatus: 'sent', outboxSentAt: ago(0, 20) }] },
+        { client: { telegramChatId: 'chat-boyer', cp: f.tables.clients.find(row => row.id === CLIENT.boyer).cp }, settings: f.tables.app_settings[0].value, now: Date.now() });
+      await openHome(f, '?classer=nom');
+      const row = rowOf(f, D.boyer);
+      await row.getByText('Attend le client', { exact: true }).waitFor();
+      assert.match(await flat(row), new RegExp(`Demandé le ${reunionDay(Date.parse(ago(0, 20)))} · relance auto le ${reunionDay(Date.parse(plan.nextAt))}`));
+      assert.equal(await row.getByRole('button', { name: 'Relancer', exact: true }).count(), 0, 'Nothing to do: the reminder leaves on its own.');
+      await row.locator('.colis-nothing').getByText('Rien à faire', { exact: true }).waitFor();
+      // Two reminders sent (the last one two days ago): the relance is the team's again.
+      f.tables.messages.push(
+        { id: uuid(803), colis_id: D.boyer, type: 'staff', template: 'relance_feu_vert', texte: 'Bonjour Sandrine 👋', statut: 'envoye', canal: 'telegram', auteur_nom: 'Expedîle', created_at: ago(0, 10), notification_outbox: [{ status: 'sent', sent_at: ago(0, 10) }] });
+      f.tables.messages[0].created_at = ago(5); f.tables.messages[0].notification_outbox = [{ status: 'sent', sent_at: ago(5) }];
+      f.tables.messages.at(-1).created_at = ago(2); f.tables.messages.at(-1).notification_outbox = [{ status: 'sent', sent_at: ago(2) }];
+      f.tables.messages.push({ id: uuid(804), colis_id: D.boyer, type: 'staff', template: 'relance_feu_vert', texte: 'Bonjour Sandrine 👋', statut: 'envoye', canal: 'telegram', auteur_nom: 'Expedîle', created_at: ago(3), notification_outbox: [{ status: 'sent', sent_at: ago(3) }] });
+      boyer.demande_feu_vert_envoyee_at = ago(5);
+      await openHome(f, '?classer=nom');
+      await rowOf(f, D.boyer).getByRole('button', { name: 'Relancer', exact: true }).waitFor();
+      assert.match(await flat(rowOf(f, D.boyer)), new RegExp(`Sans réponse après 2 relances · relancé le ${reunionDay(Date.parse(ago(2)))}`));
+      noSend(f);
+    }, { prepare: f => {
+      f.tables.app_settings[0].value.relancesAccordAuto = { actif: true, depuis: ago(30), premiereApresHeures: 48, suivanteApresHeures: 24, nombreMax: 2 };
+      f.tables.clients.find(row => row.id === CLIENT.boyer).telegram_chat_id = 'chat-boyer';
+      Object.assign(f.tables.messages[0], { created_at: ago(0, 20), notification_outbox: [{ status: 'sent', sent_at: ago(0, 20) }] });
+      f.tables.colis.find(row => row.id === D.boyer).demande_feu_vert_envoyee_at = ago(0, 20);
+    } });
+
     await scenario('row-actions-open-their-page', async f => {
       await openHome(f, '?classer=nom');
       const href = async (key, name) => rowOf(f, D[key]).getByRole('link', { name, exact: true }).getAttribute('href');

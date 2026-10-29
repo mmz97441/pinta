@@ -63,6 +63,13 @@ test('the validation request sends the server parameters; without notice, no cha
   assert.match(generated, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   // 4096 characters as the server counts them: an emoji is one character.
   assert.equal(api.validationRequest({ clientId: CLIENT, items, notify: true, canal: 'email', template: 'arrivee_colis_facture', text: '📦'.repeat(4096) }).p_canal, 'email');
+  // The notice that also asks the agreement: sent beside the notice, on Telegram; left out of the call when absent.
+  assert.deepEqual(plain(api.validationRequest({ clientId: CLIENT, items, notify: true, canal: 'telegram', template: 'arrivee_colis_facture', text: 'Bonjour Flavie',
+    requestId: REQUEST, consentText: 'Bonjour Flavie, préparons-nous ?' })),
+  { p_client_id: CLIENT, p_items: items, p_notify: true, p_canal: 'telegram', p_template: 'arrivee_colis_facture', p_text: 'Bonjour Flavie', p_request_id: REQUEST,
+    p_consent_text: 'Bonjour Flavie, préparons-nous ?' });
+  assert.equal('p_consent_text' in api.validationRequest({ clientId: CLIENT, items, notify: true, canal: 'telegram', template: 'arrivee_colis', text: 'Bonjour', consentText: null }), false);
+  assert.equal(api.validationRequest({ clientId: CLIENT, items, notify: true, canal: 'telegram', template: 'arrivee_colis', text: 'Bonjour', consentText: '📦'.repeat(4096) }).p_consent_text.length, 8192);
   // Only the three keys the server reads are sent.
   assert.deepEqual(plain(api.validationItems([{ colisId: ` ${NEW} `, fromCarton: 3, throughCarton: 3, ref: 'EXP-NEW', cartons: [] }])), [{ colisId: NEW, fromCarton: 3, throughCarton: 3 }]);
 });
@@ -92,6 +99,11 @@ test('an argument the server would refuse is refused before any call, with code 
     [{ template: 'demande_feu_vert' }, 'Choisissez le modèle de l’avis d’arrivée : arrivee_colis ou arrivee_colis_facture.'],
     [{ text: '   ' }, 'Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.'],
     [{ text: 'x'.repeat(4097) }, 'Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.'],
+    [{ consentText: '   ' }, 'Le texte de l’avis avec la demande d’accord doit contenir de 1 à 4096 caractères.'],
+    [{ consentText: 'x'.repeat(4097) }, 'Le texte de l’avis avec la demande d’accord doit contenir de 1 à 4096 caractères.'],
+    [{ consentText: 42 }, 'Le texte de l’avis avec la demande d’accord doit contenir de 1 à 4096 caractères.'],
+    [{ canal: 'email', consentText: 'Préparons-nous ?' }, 'La demande d’accord part avec l’avis sur Telegram seulement.'],
+    [{ notify: false, consentText: 'Préparons-nous ?' }, 'Sans avis, ne transmettez ni canal, ni modèle, ni texte.'],
   ];
   for (const [change, message] of cases) assert.throws(() => api.validationRequest({ ...base, ...change }), rejected('22023', message), JSON.stringify(change).slice(0, 80));
 });
@@ -118,8 +130,14 @@ test('a validation answer is shaped for the screens: the delivery to follow, or 
     validation: { ...validation, cartons: [{ colisId: NEW, ref: 'EXP-NEW', ...pendingRows[0].cartons[1] }] },
     message: { id: 'm1', colisId: NEW, statut: 'envoi', canal: 'telegram', template: 'arrivee_colis', texte: 'Bonjour Flavie', createdAt: STAMP },
     outbox: { id: 'o1', messageId: 'm1', colisId: NEW, canal: 'telegram', status: 'pending', attempts: 0, sentAt: null, lastError: null, idempotencyKey: 'arrival:v1' },
+    consentAsked: false,
     reused: false,
   });
+  // The notice that asked the agreement: its message is the consent request.
+  const asked = plain(api.normalizeValidationResult({ validation, message: { ...message, template: 'demande_feu_vert' }, outbox, consentAsked: true, reused: false }));
+  assert.equal(asked.consentAsked, true);
+  assert.equal(asked.message.template, 'demande_feu_vert');
+  assert.equal(api.normalizeValidationResult({ validation, message, outbox, consentAsked: 'true' }).consentAsked, false, 'Only a boolean true from the server');
   const silent = plain(api.normalizeValidationResult({ validation: { ...validation, notify: false, canal: null, template: null }, message: null, outbox: null, reused: true }));
   assert.equal(silent.message, null);
   assert.equal(silent.outbox, null);

@@ -4,6 +4,7 @@ import { PAYMENT_DETAIL_LABELS, PAYMENT_STATE_LABELS, TABLE_COLUMNS, TAXES_PRO_L
 import { statusTone } from './dossierTableTone.js';
 import { CANCELLED_SEND_LABEL, consentRelance, consentState, consentSummary } from './consentQueue.js';
 import { consentFollowUp } from './dossierAlerts.js';
+import { autoReminderPlan } from './consentReminders.js';
 import { messageDeliveryLabel, needsConversationAction } from './conversations.js';
 import { findDossierWorkAction } from './personalWork.js';
 import { hasCurrentPreparation } from './preparationReadiness.js';
@@ -247,7 +248,8 @@ function factsOf(dossier, ctx = {}) {
   // The team's tasks (staff_work_actions), the person reading (auth.u) and the team: who holds a task.
   const meId = typeof ctx.me === 'string' ? ctx.me : ctx.me?.id || null;
   return { dossier, client, envois, can, now, settings, model, tab: colisTab(dossier), finances: canSeeDossierFinances(can), pending: pendingEntry(ctx.pending, dossier.id),
-    notices: ctx.notices, tarifs: ctx.tarifs, categories: ctx.categories, actions: ctx.actions, meId, teamUsers: ctx.teamUsers };
+    notices: ctx.notices, tarifs: ctx.tarifs, categories: ctx.categories, actions: ctx.actions, meId, teamUsers: ctx.teamUsers,
+    openConversationClients: ctx.openConversationClients || null };
 }
 
 /** The existing rule of the quote engine (calculateQuote, errors of the field « factures »): the quote of a
@@ -493,16 +495,24 @@ function waitingStage(f) {
   const followUp = consentFollowUp(dossier, now);
   const relance = consentRelance(dossier);
   if (followUp?.pending) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relance' : 'Demande'} en cours d’envoi`, 'waiting', null);
+  const requestedAt = dateLabel(dossier.demandeFeuVertEnvoyeeAt);
+  const last = relance ? relance.delivered || !relance.deliveryLabel ? `relancé le ${dateLabel(relance.at)}` : `relance du ${dateLabel(relance.at)} · ${relance.deliveryLabel}`
+    : requestedAt ? `demandé le ${requestedAt}` : '';
+  // A reminder leaves on its own (relancesAccordAuto, consentReminders.js): nothing to do but to know when.
+  const auto = autoReminderPlan(dossier, { client: f.client, settings: f.settings, now, openConversationClients: f.openConversationClients });
+  if (auto && !auto.exhausted) {
+    const head = followUp ? `${relance ? 'Relancé' : 'Demandé'} le ${dateLabel(followUp.at)}` : `Sans réponse${last ? ` · ${last}` : ''}`;
+    const next = auto.suspended ? 'relance auto suspendue : conversation à traiter' : auto.due ? 'relance auto imminente' : `relance auto le ${dateLabel(auto.nextAt)}`;
+    return stage('attend_client', STAGE_LABELS.attend_client, `${head} · ${next}`, 'waiting', null);
+  }
   if (followUp) return stage('attend_client', STAGE_LABELS.attend_client, `${relance ? 'Relancé' : 'Demandé'} le ${dateLabel(followUp.at)}`, 'waiting', null);
   // The wait has ended (« Attente terminée … à réexaminer »): the client answered « wait », so the accord is asked
   // again from the accord task (a new request version), never relanced on the old one.
   if (waitChosen) return stage('attend_client', STAGE_LABELS.attend_client, consentSummary(consent), 'waiting', ACTIONS.redemanderAccord());
-  // No follow-up running: the relance is due. It never leaves on its own (the server's reminders are manual). An
-  // e-mail relance kept as a draft says so (« Brouillon manuel »).
-  const requestedAt = dateLabel(dossier.demandeFeuVertEnvoyeeAt);
-  const last = relance ? relance.delivered || !relance.deliveryLabel ? `relancé le ${dateLabel(relance.at)}` : `relance du ${dateLabel(relance.at)} · ${relance.deliveryLabel}`
-    : requestedAt ? `demandé le ${requestedAt}` : '';
-  return stage('attend_client', STAGE_LABELS.attend_client, `Sans réponse${last ? ` · ${last}` : ''}`, 'waiting', ACTIONS.relancer());
+  // No follow-up running and no automatic reminder left (they are off, the client has no Telegram, or they were all
+  // sent): the relance is the team's. An e-mail relance kept as a draft says so (« Brouillon manuel »).
+  const silence = auto?.exhausted ? `Sans réponse après ${countLabel(auto.sent, 'relance', 'relances')}` : 'Sans réponse';
+  return stage('attend_client', STAGE_LABELS.attend_client, `${silence}${last ? ` · ${last}` : ''}`, 'waiting', ACTIONS.relancer());
 }
 
 function preparationDetail(dossier) {

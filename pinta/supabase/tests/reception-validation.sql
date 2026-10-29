@@ -91,7 +91,7 @@ BEGIN
   OR EXISTS(SELECT 1 FROM pg_constraint WHERE contype='f' AND confdeltype<>'r'
    AND conrelid IN ('reception_validations'::regclass,'reception_validation_items'::regclass,'reception_photos'::regclass)) THEN
   RAISE EXCEPTION 'FAIL: seven RESTRICT keys expected'; END IF;
- FOREACH fn IN ARRAY ARRAY['list_pending_receptions(uuid)','validate_reception(uuid,jsonb,boolean,text,text,text,uuid)','list_arrival_notices(uuid,uuid,integer)',
+ FOREACH fn IN ARRAY ARRAY['list_pending_receptions(uuid)','validate_reception(uuid,jsonb,boolean,text,text,text,uuid,text)','list_arrival_notices(uuid,uuid,integer)',
   'add_reception_photo(uuid,integer,text)','list_reception_photos(uuid)'] LOOP
   IF NOT has_function_privilege('authenticated',fn,'EXECUTE') OR has_function_privilege('anon',fn,'EXECUTE')
    OR EXISTS(SELECT 1 FROM pg_proc p,aclexplode(p.proacl) a WHERE p.oid=fn::regprocedure AND a.grantee=0)
@@ -365,7 +365,7 @@ SELECT set_config('rv.notices',list_arrival_notices(rv_id('A'))::text,true);
 SELECT rv_assert((SELECT jsonb_array_length(n)=1 AND n->0->>'id'=t->'validation'->>'id' AND n->0->>'clientId'=rv_id('A')::text
   AND n->0->'client'='{"nom":"Payet","prenom":"Flavie"}' AND n->0->'actor'='{"nom":"Alex Martin"}' AND n->0->'notify'='true'
   AND n->0->>'canal'='telegram' AND n->0->>'template'='arrivee_colis' AND n->0->'items'=t->'validation'->'items' AND n->0->'cartons'=t->'validation'->'cartons'
-  AND n->0->'message'=jsonb_build_object('id',t->'message'->'id','colisId',rv_id('A_NEW'),'statut','envoi','texte',current_setting('rv.text'),'createdAt',t->'message'->'created_at')
+  AND n->0->'message'=jsonb_build_object('id',t->'message'->'id','colisId',rv_id('A_NEW'),'statut','envoi','texte',current_setting('rv.text'),'createdAt',t->'message'->'created_at','template','arrivee_colis')
   AND n->0->'outbox'=jsonb_build_object('id',t->'outbox'->'id','status','pending','attempts',0,'sentAt',NULL,'lastError',NULL)
   AND n->0->>'createdAt'=t->'validation'->>'createdAt'
   FROM (SELECT current_setting('rv.notices')::jsonb n,current_setting('rv.telegram')::jsonb t) x),'the notice, its dossier, its text and its delivery waiting to be sent');

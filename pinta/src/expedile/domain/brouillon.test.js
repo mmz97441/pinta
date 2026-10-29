@@ -195,6 +195,40 @@ test('« Attend le client »: nothing to do while the request is followed up or 
   assert.equal(relance.tone, 'waiting');
 });
 
+test('« Attend le client » with the automatic reminders: when the next one leaves, « Relancer » only once they are all sent', () => {
+  const settings = { relancesAccordAuto: { actif: true, depuis: '2026-10-01T00:00:00Z', premiereApresHeures: 48, suivanteApresHeures: 24, nombreMax: 2 } };
+  const linked = { ...flavie, telegramChatId: '7001' };
+  const auto = (changes = {}) => ({ settings, getClient: id => (id === flavie.id ? linked : clients.get(id) || null), ...changes });
+  const waiting = { ...measured, statut: 'attente_feu_vert' };
+  const read = (dossier, changes) => { const step = stageOf(dossier, auto(changes)); return [step.key, step.detail, step.action && step.action.key]; };
+  // Delivered two hours ago: the first reminder leaves 48 hours after the delivery.
+  assert.deepEqual(read({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-28T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-28T08:00:00Z')] }),
+    ['attend_client', 'Demandé le 28/10/2026 · relance auto le 30/10/2026', null]);
+  // Due already: the scheduled worker sends it at its next run, nothing to do.
+  assert.deepEqual(read({ ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-26T08:00:00Z', messages: [staffMessage('demande_feu_vert', '2026-10-26T08:00:00Z')] }),
+    ['attend_client', 'Sans réponse · demandé le 26/10/2026 · relance auto imminente', null]);
+  const request = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z');
+  const asked = { ...waiting, demandeFeuVertEnvoyeeAt: '2026-10-25T08:00:00Z' };
+  // The first reminder delivered: the second 24 hours later.
+  assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z', { auteurId: null })] }),
+    ['attend_client', 'Relancé le 28/10/2026 · relance auto le 29/10/2026', null]);
+  // Both sent (a relance of the team counts) and followed up for 24 hours: then « Relancer » is the team's.
+  const both = [request, staffMessage('relance_feu_vert', '2026-10-26T08:00:00Z'), staffMessage('relance_feu_vert', '2026-10-27T08:00:00Z')];
+  assert.deepEqual(read({ ...waiting, messages: both }), ['attend_client', 'Sans réponse après 2 relances · relancé le 27/10/2026', 'relancer']);
+  assert.deepEqual(read({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-27T08:00:00Z'), staffMessage('relance_feu_vert', '2026-10-28T08:00:00Z')] }),
+    ['attend_client', 'Relancé le 28/10/2026', null], 'The last reminder is followed up like any relance.');
+  // A conversation of the client waiting for the team (another dossier): the reminders wait for it.
+  assert.deepEqual(read({ ...asked, messages: [request] }, { openConversationClients: new Set([flavie.id]) }),
+    ['attend_client', 'Sans réponse · demandé le 25/10/2026 · relance auto suspendue : conversation à traiter', null]);
+  // No Telegram, settings off, a request delivered before their start: the relance stays the team's, as before.
+  assert.deepEqual(read({ ...asked, messages: [request] }, { getClient: id => clients.get(id) || null }), ['attend_client', 'Sans réponse · demandé le 25/10/2026', 'relancer']);
+  assert.deepEqual(read({ ...asked, messages: [request] }, { settings: {} }), ['attend_client', 'Sans réponse · demandé le 25/10/2026', 'relancer']);
+  assert.deepEqual(read({ ...asked, messages: [request] }, { settings: { relancesAccordAuto: { ...settings.relancesAccordAuto, depuis: '2026-10-28T00:00:00Z' } } }),
+    ['attend_client', 'Sans réponse · demandé le 25/10/2026', 'relancer']);
+  // A failed reminder is checked, never followed by another automatic one.
+  assert.equal(stageOf({ ...waiting, messages: [request, staffMessage('relance_feu_vert', '2026-10-28T07:00:00Z', { statut: 'echec', outboxStatus: 'failed', outboxSentAt: null })] }, auto()).key, 'demande_a_verifier');
+});
+
 test('« Le client a répondu »: a written message to answer comes before any request or relance, never « Relancer »', () => {
   const waiting = { ...measured, statut: 'attente_feu_vert', demandeFeuVertEnvoyeeAt: '2026-10-25T08:00:00Z' };
   const request = staffMessage('demande_feu_vert', '2026-10-25T08:00:00Z');

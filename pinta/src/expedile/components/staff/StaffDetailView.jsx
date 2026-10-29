@@ -11,6 +11,7 @@ import { Ligne } from '../ui';
 import WebcamCapture from '../ui/WebcamCapture';
 import DossierDocumentsTask from './DossierDocumentsTask';
 import ReceivedCartons from '../detail/ReceivedCartons';
+import { autoReminderPlan, openConversationClients } from '../../domain/consentReminders';
 import { receptionCartonManifest, receptionMeasurements } from '../../domain/reception';
 import { currentInvoices } from '../../domain/invoiceDocuments';
 import { frenchNumber, needsQuoteRecalculation } from '../../domain/clientJourney';
@@ -161,6 +162,7 @@ export default function StaffDetailView({ workspace = false, active = true, task
     refreshColis,
     confirmerDevis,
     settings = {},
+    data = [],
     categories,
     getTarif,
     envois,
@@ -668,7 +670,13 @@ export default function StaffDetailView({ workspace = false, active = true, task
         return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">Demander l’accord du client</h2><p className="text-sm text-slate-600">{plural(received, 'carton')} {pluralWord(received, 'reçu')} et {pluralWord(received, 'mesuré')} · Casier {sel.casier || 'à renseigner'}</p>{sel.consentRequestVersion > 0 && <p role="status" className="text-sm font-semibold text-slate-700">Nouvelle demande à envoyer. La réponse précédente reste dans l’historique.</p>}<TaskMessage key={`consent-${sel.id}`} template="demande_feu_vert" autoPreview sendLabel="Envoyer la demande d’accord" label="Préparer la demande au client" disabled={actionLoading || !can('perm_colis_demander_feuvert')} beforeSend={options => demanderFeuVert(sel.id, options)} />{continuation}</section>;
       }
       case 'attente_feu_vert': {
-        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">En attente du client</h2><p className="text-sm text-slate-600">{!!sel.attenteClientDate ? 'Le client souhaite attendre d’autres cartons.' : 'La demande est enregistrée. L’accord du client est attendu.'}</p>{lastRequest && <p className="text-sm text-slate-600">Dernière demande : {lastRequest}</p>}{replyDate && <p className="text-sm text-slate-600">Réponse client : {replyDate}{sel.attenteClientMotif ? ` · ${sel.attenteClientMotif}` : ''}</p>}{sel.attenteClientUntil && <p className="text-sm text-slate-600">Attente demandée jusqu’au {dateLabel(sel.attenteClientUntil)}</p>}{!sel.attenteClientDate && <p className="text-sm text-slate-600">Consultez le dernier échange avant de relancer. La relance reste à votre initiative.</p>}{!sel.attenteClientDate && <TaskMessage key={`consent-${sel.id}`} template="relance_feu_vert" label="Préparer une relance" disabled={!can('perm_colis_demander_feuvert')} />}{onOpenContext && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => onOpenContext('messages')}>Voir les échanges</button>}{sel.attenteClientDate && reopenControl('accord')}{continuation}</section>;
+        // The automatic reminders (relancesAccordAuto, domain/consentReminders.js): when the next one leaves.
+        const auto = autoReminderPlan(sel, { client: cl, settings, now: Date.now(), openConversationClients: openConversationClients(data) });
+        const relanceNote = auto && !auto.exhausted
+          ? auto.suspended ? 'Relance automatique suspendue : une conversation du client attend votre réponse.'
+            : `${auto.due ? 'Relance automatique imminente' : `Relance automatique le ${dateLabel(auto.nextAt)}`} : rien à faire. Vous pouvez aussi relancer vous-même ; votre relance compte.`
+          : 'Consultez le dernier échange avant de relancer. La relance reste à votre initiative.';
+        return <section className="space-y-4 rounded-2xl border border-slate-200 bg-white p-5"><h2 className="text-lg font-bold text-slate-800">En attente du client</h2><p className="text-sm text-slate-600">{!!sel.attenteClientDate ? 'Le client souhaite attendre d’autres cartons.' : 'La demande est enregistrée. L’accord du client est attendu.'}</p>{lastRequest && <p className="text-sm text-slate-600">Dernière demande : {lastRequest}</p>}{replyDate && <p className="text-sm text-slate-600">Réponse client : {replyDate}{sel.attenteClientMotif ? ` · ${sel.attenteClientMotif}` : ''}</p>}{sel.attenteClientUntil && <p className="text-sm text-slate-600">Attente demandée jusqu’au {dateLabel(sel.attenteClientUntil)}</p>}{!sel.attenteClientDate && <p className="text-sm text-slate-600">{relanceNote}</p>}{!sel.attenteClientDate && <TaskMessage key={`consent-${sel.id}`} template="relance_feu_vert" label="Préparer une relance" disabled={!can('perm_colis_demander_feuvert')} />}{onOpenContext && <button className="min-h-11 text-sm font-semibold text-slate-700 underline" onClick={() => onOpenContext('messages')}>Voir les échanges</button>}{sel.attenteClientDate && reopenControl('accord')}{continuation}</section>;
       }
       case 'refuse_client': return <section className="space-y-4"><h2 className="text-lg font-bold text-slate-800">Préparation refusée par le client</h2><p className="text-sm text-slate-600">La préparation reste arrêtée. La personne qui suit le dossier doit convenir avec le client de la suite à donner.</p><p className="text-sm text-slate-600">Suit le dossier : {staffName(sel.responsibleStaffId, teamUsers)}{replyDate ? ` · Refus reçu le ${replyDate}` : ""}</p>{onOpenContext && <button className="min-h-11 font-semibold underline" onClick={() => onOpenContext('messages')}>Ouvrir les échanges</button>}{reopenControl('accord')}{continuation}</section>;
 

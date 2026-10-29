@@ -8,6 +8,7 @@ import useParamInput from '../../hooks/useParamInput';
 import useDocumentTitle from '../../hooks/useDocumentTitle';
 import { holdsStaffData, staffDataState } from '../../domain/dataLoad';
 import { canSeeDossierFinances } from '../../domain/dossierOverview';
+import { openConversationClients } from '../../domain/consentReminders';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { NO_DEPARTURE_GROUP_KEY } from '../../domain/departureGroups';
 import { COLIS_SORTS, COLIS_TABS, MEASURE_MISSING_LABEL, NO_DESTINATION_GROUP_KEY, PAID_TOTAL_STATE, brouillonAlerts, colisRow, colisSearchMatch, colisSortKey, colisTab, colisTabKey, colisTotals, filterColisRows, groupColisRowsByDeparture, groupColisRowsByDestination, pendingByColis, sortColisRows } from '../../domain/brouillon';
@@ -153,8 +154,10 @@ export default function ColisHome() {
   // `actions`, `me`, `teamUsers`: who holds each task (the step's `heldBy`). `tarifs` and `categories` once loaded
   // only (empty while the data load runs or after it failed): « Devis à compléter » is checked against them.
   const me = auth?.u || null;
-  const ctx = useMemo(() => ({ getClient, envois, settings, pending: pendingIndex, notices: notices || [], can, now, actions: workActions, me, teamUsers, ...(sbReady ? { tarifs, categories } : {}) }),
-    [getClient, envois, settings, pendingIndex, notices, can, now, workActions, me, teamUsers, sbReady, tarifs, categories]);
+  // A conversation of the client waiting for the team suspends the automatic reminders of all his dossiers.
+  const conversations = useMemo(() => openConversationClients(data), [data]);
+  const ctx = useMemo(() => ({ getClient, envois, settings, pending: pendingIndex, notices: notices || [], can, now, actions: workActions, me, teamUsers, openConversationClients: conversations, ...(sbReady ? { tarifs, categories } : {}) }),
+    [getClient, envois, settings, pendingIndex, notices, can, now, workActions, me, teamUsers, conversations, sbReady, tarifs, categories]);
   const dossiersByTab = useMemo(() => {
     const byTab = new Map(COLIS_TABS.map(item => [item.key, []]));
     for (const dossier of data) { const key = colisTab(dossier); if (key) byTab.get(key).push(dossier); }

@@ -50,7 +50,7 @@ En haut de l'onglet : nombre de clients, de cartons, poids et volume du stock af
 |---|---|---|
 | Réception à valider | Des cartons enregistrés n'ont pas encore été validés | Valider la réception |
 | Accord à demander | Accord du client jamais demandé, ou à redemander après un nouveau carton | Demander l'accord |
-| Attend le client | Accord demandé, pas de réponse ; ou le client a choisi d'attendre | Rien à faire, puis « Relancer » quand la relance est due (aucune relance ne part seule) |
+| Attend le client | Accord demandé, pas de réponse ; ou le client a choisi d'attendre | Rien à faire tant que les relances automatiques partent (« relance auto le … ») ; « Relancer » quand elles sont épuisées, désactivées ou impossibles (client sans Telegram) |
 | Le client refuse | Refus enregistré | Voir le dossier |
 | À préparer | Accord donné, préparation non terminée | Préparer |
 | Facture manquante | Préparé, facture d'achat absente ou à vérifier | Ajouter la facture |
@@ -88,7 +88,7 @@ Sur téléphone, l'ordre devient : total et action, colis après optimisation, c
    - **Ajouter un carton** : numéro de suivi (scan ou saisie, facultatif), vendeur (facultatif), quatre mesures obligatoires (longueur, largeur, hauteur en cm, poids en kg), et « Signaler un problème » : « Carton abîmé ou ouvert » (photo demandée) et « Produit interdit » (la liste des produits interdits en avion). Pour un nouveau brouillon, le casier est demandé. **Chaque carton est enregistré dès « Ajouter ce carton »** : rien n'est perdu si la tablette s'éteint. Le formulaire se vide aussitôt, prêt pour le scan suivant ; Entrée sur le poids enregistre le carton.
    - **À valider** : sous le formulaire, tous les cartons du client qui attendent leur validation (ceux de cette réception et ceux enregistrés plus tôt), relus après chaque carton. Puis **« Valider N cartons et prévenir [prénom] »** (un seul avis pour tous) et le lien discret « Valider sans prévenir ». Un carton en cours de saisie bloque la validation (« Terminer ce carton » ou « Effacer la saisie ») : il n'est jamais oublié.
    - Ouvert depuis « Valider la réception » (Colis, Avis d'arrivée), l'écran montre d'abord la liste à valider ; le formulaire attend derrière « Ajouter un carton pour [prénom] ».
-3. **Rangement.** Le casier en très grand, le nombre de cartons du brouillon, l'état de l'avis d'arrivée, et le rappel quand l'accord du client doit être redemandé. Boutons « Client suivant » et « Voir le Brouillon ».
+3. **Rangement.** Le casier en très grand, le nombre de cartons du brouillon, l'état de l'avis d'arrivée, l'accord demandé dans le même message (ou « L'accord de [prénom] reste à demander »), et le rappel quand l'accord du client doit être redemandé. Boutons « Client suivant » et « Voir le Brouillon ».
 
 ## Avis d'arrivée
 
@@ -97,6 +97,18 @@ Sur téléphone, l'ordre devient : total et action, colis après optimisation, c
 - **États affichés** : En cours d'envoi, Envoyé (Telegram a confirmé), Remis (le fournisseur d'e-mail a confirmé la livraison), Non remis (avec la raison et « Corriger l'adresse »), Sans avis (validé sans prévenir). Un envoi au résultat incertain n'est jamais renvoyé automatiquement.
 - **Réceptions non validées** : des cartons enregistrés sans avis apparaissent dans l'alerte du Brouillon et sur l'écran « Avis d'arrivée », avec « Valider et prévenir ».
 - Le texte suit les règles du ton : prénom, contexte, rassurance, liste des colis, rappel des factures d'achat si elles manquent, signature. Deux versions : avec et sans facture manquante.
+- **Avec la demande d'accord** (depuis le 29 octobre) : sur Telegram, quand la réception porte sur un seul dossier, le même message pose la question et porte les boutons « Autoriser la préparation », « Attendre mes autres colis », « Refuser ». Voir « Accord automatique ».
+
+## Accord automatique (29 octobre)
+
+Demande de l'équipe : l'accord du client se demandait et se relançait à la main ; il part désormais tout seul, au plus près de la réception.
+
+- **Un seul message à la validation.** Valider la réception d'un client sur Telegram envoie l'avis d'arrivée **avec** la question « Souhaitez-vous que nous préparions votre envoi ? » et les trois boutons. C'est une demande d'accord ordinaire (`demande_feu_vert`, instantané des cartons, version de l'accord) : la décision par bouton, sa confirmation, le suivi de 24 h et les tâches de l'équipe fonctionnent comme avec « Demander l'accord ». L'accord vaut pour **tout le dossier** (« Votre accord vaut pour l'ensemble de votre dossier EXP-… (N colis au total) ») et pour lui seul : jamais pour un autre envoi du même client.
+- **Quand l'avis part seul** (l'accord reste à demander depuis Colis, « Accord à demander ») : plusieurs dossiers dans la même validation, un carton du dossier laissé pour une validation suivante (lot découpé, carton ajouté entre-temps par un collègue), client sans Telegram (e-mail), personne sans le droit de demander l'accord, dossier qui n'est plus à l'étape des mesures, tâche de réception suivie par un collègue. Le serveur décide ; l'écran annonce ce qui va partir et l'étape « Rangement » dit ce qui est réellement parti.
+- **Relances automatiques.** Sans réponse, une relance part **48 h** après que la demande a atteint le client, puis une seconde **24 h** après la première ; deux au plus. Telegram seulement, entre 8 h et 20 h à l'heure du client (La Réunion, Mayotte, Guadeloupe, Martinique). Une relance faite par l'équipe compte. Rien ne part pendant qu'une conversation du client attend l'équipe, après un choix « Attendre mes autres colis », pour une demande remplacée, non remise, échouée ou annulée, ni pour les demandes envoyées avant la mise en service (jamais une relance de l'historique). Les règles existantes s'appliquent à l'envoi : une relance par client sur 24 h.
+- **Texte de la relance** (`relance_feu_vert`) : « Votre dossier EXP-… (N colis) vous attend à notre entrepôt de Paris… Touchez « Autoriser la préparation » ci-dessous… ». Le texte enregistré par l'équipe est utilisé tel quel ; une variable inconnue bloque la relance (jamais un autre texte).
+- **Ce que voit l'équipe dans Colis** : « Demandé le 28/10/2026 · relance auto le 30/10/2026 », « … · relance auto imminente », « … · relance auto suspendue : conversation à traiter », sans action à faire. Une fois les relances épuisées et suivies 24 h : « Sans réponse après 2 relances · relancé le … » et le bouton « Relancer » (ou un appel).
+- **Réglage** : `app_settings.business.relancesAccordAuto = {actif, depuis, premiereApresHeures: 48, suivanteApresHeures: 24, nombreMax: 2}`, posé par la migration. Absent, désactivé ou illisible : aucune relance automatique (l'équipe relance comme avant).
 
 ## Hors périmètre de cette première livraison
 
@@ -148,7 +160,13 @@ Aucune commande existante n'est redéfinie : ni `queue_message`, ni `append_rece
 
 **`list_arrival_notices(p_client_id uuid DEFAULT NULL, p_colis_id uuid DEFAULT NULL, p_limit int DEFAULT 50) RETURNS jsonb`** — équipe seulement. Du plus récent au plus ancien, 1 à 200 : `{id, createdAt, clientId, client:{nom, prenom}, actor:{nom}, notify, canal, template, items, cartons, message:{id, statut, texte, createdAt}|null, outbox:{id, status, attempts, sentAt, lastError}|null}`.
 
-**Fonctions JavaScript** (`src/expedile/lib/receptionValidation.js`) : `fetchPendingReceptions({clientId})`, `validateReception({clientId, items, notify, canal, template, text, requestId})`, `fetchArrivalNotices({clientId, colisId, limit})`. Elles suivent les conventions d'erreur de `lib/supabaseData.js`.
+**Fonctions JavaScript** (`src/expedile/lib/receptionValidation.js`) : `fetchPendingReceptions({clientId})`, `validateReception({clientId, items, notify, canal, template, text, requestId, consentText})`, `fetchArrivalNotices({clientId, colisId, limit})`. Elles suivent les conventions d'erreur de `lib/supabaseData.js`.
+
+**Accord automatique** (`supabase/migrations/20261029000001_consent_automation.sql`) :
+
+- `validate_reception(…, p_request_id uuid, p_consent_text text DEFAULT NULL)` : l'avis qui demande aussi l'accord, envoyé à la place de `p_text` quand l'accord peut être demandé (voir « Accord automatique ») : `queue_message(<dossier>, p_consent_text, 'demande_feu_vert', 'arrival:'||<id>, <boutons du dossier>, 'telegram', <version de l'accord>)` ; le dossier passe à `attente_feu_vert`. Sinon l'avis simple, comme avant. `p_consent_text` de 1 à 4096 caractères, refusé sans avis (22023). Il fait partie de la demande rejouée (même identifiant, autre texte : 40001). Retour : `consentAsked` en plus ; `list_arrival_notices` donne le modèle du message (`demande_feu_vert` quand l'avis a demandé l'accord).
+- `consent_reminders_due(p_now timestamptz) RETURNS jsonb`, service planifié seulement (42501 sinon) : `[{colisId, clientId, ref, consentVersion, number, dueAt, destinationCode}]`. La fonction `relances-auto` (toutes les 5 minutes) rend le modèle `relance_feu_vert` enregistré et le met en file par `queue_message` (clé `consent-reminder:<dossier>:<version>:<numéro>`, boutons du dossier), puis sa boucle d'envoi habituelle l'expédie.
+- Côté écran : `renderConsentNotice` (`services/arrivalNotice.js`), `domain/consentReminders.js` (prochaine relance, miroir de `consent_reminders_due`).
 
 ### Messages : l'avis d'arrivée
 
@@ -156,6 +174,7 @@ Aucune commande existante n'est redéfinie : ni `queue_message`, ni `append_rece
 - Variables nouvelles, présentes dans les deux moteurs de rendu et couvertes par le test de parité : `{{nb_colis_recus}}` (« 1 colis », « 3 colis ») et `{{liste_colis_recus}}` (une ligne par colis de cette réception, numérotée dans l'ordre de la réception : vendeur, numéro de suivi, dimensions et poids). Elles se nourrissent d'un contexte `reception: {cartons:[…]}` ; sans ce contexte elles sont vides.
 - Ton : prénom, contexte (vos colis sont arrivés à notre entrepôt), rassurance, liste, prochaine étape, rappel de la facture d'achat dans la variante, signature « L'équipe Expedîle ». Texte brut, sans mise en forme.
 - `src/expedile/services/arrivalNotice.js` : `arrivalChannel(client)` applique la même règle que le serveur ; `arrivalTemplate(colisList)` choisit la variante facture quand un dossier de la réception n'a pas de facture d'achat reçue, selon la règle déjà utilisée pour « facture manquante » ; `renderArrivalNotice({client, colisList, cartons, destination, settings, bodies})` rend `{canal, template, text}`, ou `{canal: null}` sans moyen de contact.
+- Avec la demande d'accord (29 octobre), Telegram seulement : `arrivee_colis_accord_telegram` et `arrivee_colis_accord_facture_telegram` (« Avis d'arrivée avec demande d'accord », en tête de l'éditeur de modèles), même début que l'avis, puis la question, les boutons nommés tels qu'ils s'affichent, la portée de l'accord (`{{ref}}`, `{{nb_cartons}}`), la facture dans la variante, `{{lien_espace}}`. `renderConsentNotice(...)` rend `{template, text}` pour une réception d'un seul dossier sur Telegram, sinon `null`.
 
 ### Adresses et menu
 
@@ -202,7 +221,7 @@ Module pur (imports avec extension `.js`, testé par `node --test`, compatible S
 | `reception_a_valider` | Réception à valider | des cartons attendent la validation | `valider_reception` « Valider la réception » → `/recevoir?client=<id>&valider=1` |
 | `mesures_a_completer` | Mesures à compléter | `receptionne` (ancien carton non mesuré) | `completer_mesures` → tâche `reception` |
 | `accord_a_demander` | Accord à demander | `mesure` | `demander_accord` « Demander l'accord » (panneau d'envoi sur place) |
-| `attend_client` | Attend le client | `attente_feu_vert` | aucune ; `relancer` « Relancer » (panneau d'envoi sur place) quand `consentFollowUp` la dit due ; `redemander_accord` « Redemander l'accord » → tâche `accord` quand l'attente choisie par le client est terminée (les relances ne partent jamais seules) |
+| `attend_client` | Attend le client | `attente_feu_vert` | aucune tant qu'une relance automatique reste à partir (`autoReminderPlan`, `domain/consentReminders.js` : « relance auto le … », « imminente », « suspendue : conversation à traiter ») ; `relancer` « Relancer » (panneau d'envoi sur place) quand `consentFollowUp` la dit due et qu'aucune relance automatique ne reste ; `redemander_accord` « Redemander l'accord » → tâche `accord` quand l'attente choisie par le client est terminée |
 | `client_refuse` | Le client refuse | `refuse_client` | `voir_dossier` → tâche `accord` |
 | `produit_interdit` | Produit interdit à régler | produit interdit signalé et dossier accordé | `voir_dossier` → tâche `reception` |
 | `a_preparer` | À préparer | accord donné, préparation pas à jour | `preparer` → tâche `preparation` |
@@ -245,4 +264,5 @@ Les étapes « Mesures à compléter » et « Produit interdit à régler » com
 - **Messages lisibles.** L'erreur « Could not find the function public.list_pending_receptions… » (migration pas encore en production au moment de la capture) ne peut plus s'afficher telle quelle : phrase en français et « Réessayer ».
 - **Colis : tri par destination**, **recherche par numéro de colis** (numéro de suivi d'un carton, référence du dossier) **et par numéro d'expédition** (référence du départ, numéro du transporteur), **dimensions** de chaque carton dans le tableau.
 - **Page qui glissait.** Les textes masqués des écrans Colis et Réception (annonces pour lecteurs d'écran, légendes de tableau) ne rallongent plus la page entière : une mise au point ne fait plus remonter le menu.
-- **Comparaison avec l'outil actuel (SunApps), à arbitrer** : la réception de SunApps ne demande que le numéro de suivi (les mesures sont prises une fois, pour le colis expédié) ; ici, chaque carton a ses quatre mesures. Restent absents d'expedile.app : la zone NORD/SUD/OUEST dans la liste Colis (la table existe), le n° client et le forfait dans la liste, les SMS, un export TMS.
+- **Comparaison avec l'outil actuel (SunApps)** : la réception de SunApps ne demande que le numéro de suivi ; ici, chaque carton a ses quatre mesures. **Décision de l'équipe : les mesures restent obligatoires à la réception.** La zone (NORD, EST, OUEST, SUD pour La Réunion), le numéro client et le forfait s'affichent désormais sur la ligne Colis et la fiche, et se cherchent. Restent absents : les SMS, un export TMS (format à fournir).
+- **Accord automatique** : voir la section du même nom (avis + accord en un message, relances à 48 h puis 24 h).

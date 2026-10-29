@@ -88,9 +88,12 @@ const TEMPLATES = [
   // Arrival notice (2026-10-28): one message per validated reception (services/arrivalNotice.js).
   { key: 'arrivee_colis', label: 'Avis d’arrivée', hint: 'Envoyé quand l’équipe valide une réception et choisit de prévenir le client : un seul message annonce tous les colis de cette réception, sur Telegram si le client l’a relié, sinon par email.' },
   { key: 'arrivee_colis_facture', label: 'Avis d’arrivée, facture d’achat à envoyer', hint: 'Remplace l’avis d’arrivée quand un dossier de la réception attend encore la facture d’achat du client (jamais pour un client professionnel).' },
+  // The arrival notice that also asks the agreement (2026-10-29): Telegram only, its buttons decide for one dossier.
+  { key: 'arrivee_colis_accord', label: 'Avis d’arrivée avec demande d’accord', canals: ['telegram'], hint: 'Envoyé sur Telegram à la place de l’avis d’arrivée quand l’équipe valide la réception d’un seul dossier et prévient le client : le même message annonce les colis et porte les boutons « Autoriser la préparation », « Attendre mes autres colis » et « Refuser ». Sans réponse, la relance de la demande d’accord part automatiquement.' },
+  { key: 'arrivee_colis_accord_facture', label: 'Avis d’arrivée avec demande d’accord, facture d’achat à envoyer', canals: ['telegram'], hint: 'Remplace le précédent quand le dossier attend encore la facture d’achat du client (jamais pour un client professionnel). Une photo ou un PDF envoyé en réponse est ajouté comme facture à vérifier.' },
   { key: 'reception', label: 'Réception seule (ancien modèle)' },
   { key: 'facture_manquante', label: 'Facture manquante' },
-  { key: 'demande_feu_vert', label: 'Réception et demande d’accord' },
+  { key: 'demande_feu_vert', label: 'Réception et demande d’accord', hint: 'Envoyé par « Demander l’accord » (Colis ou dossier) quand l’accord n’a pas été demandé avec l’avis d’arrivée : réception de plusieurs dossiers, client sans Telegram, nouvelle demande après une attente.' },
   // Confirmations sent by the server after a Telegram button of the request (lot 3b).
   { key: 'feu_vert_recu', label: 'Accord enregistré (confirmation au client)', hint: 'Envoyé automatiquement sur Telegram quand le client autorise la préparation avec le bouton de la demande, si sa facture d’achat n’est plus attendue ou s’il est professionnel.' },
   { key: 'feu_vert_recu_facture', label: 'Accord enregistré, facture encore attendue', hint: 'Envoyé automatiquement sur Telegram quand le client autorise la préparation alors que sa facture d’achat manque encore. Un document envoyé en réponse est ajouté comme facture à vérifier.' },
@@ -98,7 +101,7 @@ const TEMPLATES = [
   { key: 'refus_recu', label: 'Refus de préparation enregistré', hint: 'Envoyé automatiquement sur Telegram quand le client refuse la préparation avec le bouton de la demande.' },
   { key: 'devis_final', label: 'Devis particulier' },
   { key: 'devis_final_pro', label: 'Devis professionnel' },
-  { key: 'relance_feu_vert', label: 'Relance de la demande d’accord' },
+  { key: 'relance_feu_vert', label: 'Relance de la demande d’accord', hint: 'Envoyé automatiquement sur Telegram quand la demande d’accord reste sans réponse : 48 h après, puis 24 h plus tard (deux relances au plus, entre 8 h et 20 h à l’heure du client). L’équipe peut aussi relancer elle-même depuis le dossier.' },
   { key: 'relance_paiement', label: 'Relance du paiement' },
   { key: 'expedie', label: 'Colis expédié' },
   { key: 'arrive', label: 'Colis arrivé à destination' },
@@ -108,6 +111,9 @@ const TEMPLATES = [
   { key: 'facture_apres_devis_sans_lien', label: 'Facture reçue après le devis (sans lien de paiement)', hint: 'Envoyé automatiquement, sur Telegram ou sinon dans l’espace client, quand une facture du client arrive après l’envoi d’un devis sans lien de paiement : le devis est retiré.' },
   { key: 'invitation_telegram', label: 'Invitation Telegram' },
 ];
+
+// The main messages first: the notice that asks the agreement, then the request sent from the dossier.
+const FIRST = ['demande_feu_vert', 'arrivee_colis_accord'];
 
 // ── Preview: replace {{var}} with examples ──
 function renderPreview(text) {
@@ -121,8 +127,11 @@ const FIELD = 'min-h-11 w-full rounded-xl border border-gray-300 bg-transparent 
 const BUTTON = 'min-h-11 rounded-xl border border-gray-300 px-4 py-2 text-sm font-semibold disabled:opacity-50';
 export default function TemplateEditor() {
   const { messageTemplates, saveMessageTemplate } = useApp();
-  const [selKey, setSelKey] = useState('demande_feu_vert');
-  const [canal, setCanal] = useState('telegram');
+  const [selKey, setSelKey] = useState('arrivee_colis_accord');
+  const [chosenCanal, setCanal] = useState('telegram');
+  // A template sent on one channel only (the notice with its Telegram buttons) shows that channel.
+  const canals = TEMPLATES.find(template => template.key === selKey)?.canals || ['telegram', 'email'];
+  const canal = canals.includes(chosenCanal) ? chosenCanal : canals[0];
   const [drafts, setDrafts, { storageAvailable }] = usePersistentDraft('admin:message-templates', {});
   const [notice, setNotice] = useState(null); const [saving, setSaving] = useState(false); const lock = useRef(false); const textarea = useRef(null);
   const bodyKey = `${selKey}_${canal}`;
@@ -170,7 +179,7 @@ export default function TemplateEditor() {
       <p>Depuis le 10 octobre 2026, le devis présente l’octroi de mer, l’OMR et la TVA comme une estimation des taxes à l’importation, payées à l’arrivée et comprises dans le prix, jamais comme des taxes facturées par Expedîle. Ces modèles partent tels qu’ils ont été enregistrés : rien n’est modifié automatiquement. Ouvrez-les, remplacez les lignes signalées par l’information « Estimation des taxes à l’importation », puis enregistrez.</p>
       <ul className="flex flex-wrap gap-2">{legacy.map(item => <li key={item.bodyKey}><button type="button" disabled={saving} aria-pressed={item.bodyKey === bodyKey} className="min-h-11 rounded-xl border border-amber-300 bg-white px-3 py-2 text-left font-semibold transition-all duration-200 ease-out active:scale-[0.98] disabled:opacity-50" onClick={() => { setSelKey(item.key); setCanal(item.canal); }}>{TEMPLATES.find(template => template.key === item.key)?.label || item.key} · {item.canal === 'email' ? 'Email' : 'Telegram'}</button></li>)}</ul>
     </section>}
-    <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Message à modifier<select className={FIELD} value={selKey} disabled={saving} onChange={e => setSelKey(e.target.value)}>{[...TEMPLATES].sort((a, b) => (a.key === 'demande_feu_vert' ? -1 : b.key === 'demande_feu_vert' ? 1 : 0)).map(t => <option key={t.key} value={t.key}>{t.label}{['telegram', 'email'].some(c => drafts[`${t.key}_${c}`]) ? ' · brouillon' : ''}</option>)}</select></label><label className="text-sm">Canal<select className={FIELD} disabled={saving} value={canal} onChange={e => setCanal(e.target.value)}><option value="telegram">Telegram</option><option value="email">Email</option></select></label></div>
+    <div className="grid gap-3 sm:grid-cols-2"><label className="text-sm">Message à modifier<select className={FIELD} value={selKey} disabled={saving} onChange={e => setSelKey(e.target.value)}>{[...TEMPLATES].sort((a, b) => FIRST.indexOf(b.key) - FIRST.indexOf(a.key)).map(t => <option key={t.key} value={t.key}>{t.label}{['telegram', 'email'].some(c => drafts[`${t.key}_${c}`]) ? ' · brouillon' : ''}</option>)}</select></label><label className="text-sm">Canal<select className={FIELD} disabled={saving} value={canal} onChange={e => setCanal(e.target.value)}>{canals.map(item => <option key={item} value={item}>{item === 'email' ? 'Email' : 'Telegram'}</option>)}</select></label></div>
     {hint && <p className="text-sm text-gray-600">{hint}{canal === 'email' ? ' La version email reste un brouillon : aucun email n’est envoyé automatiquement.' : ''}</p>}
     {legacyLines.length > 0 && <div role="note" aria-labelledby="legacy-tax-lines-title" data-testid="legacy-tax-lines" className="space-y-1 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900"><p id="legacy-tax-lines-title" className="font-semibold">Ce texte présente encore ces montants comme des taxes du prix. Lignes à remplacer par l’information « Estimation des taxes à l’importation » :</p><ul className="list-disc space-y-0.5 pl-5">{legacyLines.map((line, index) => <li key={index} className="break-words font-mono">{line}</li>)}</ul></div>}
     <p className="text-sm text-gray-600">{dirty ? 'Modifications non enregistrées. ' : ''}Vos brouillons restent disponibles lorsque vous changez de modèle ou de rubrique.{!storageAvailable && ' Stockage du navigateur indisponible : gardez cet onglet ouvert.'}</p>

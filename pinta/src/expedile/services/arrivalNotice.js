@@ -31,6 +31,27 @@ export function arrivalTemplate(colisList, client) {
   return dossiers.some((colis) => invoiceRequestState(colis).requested) ? 'arrivee_colis_facture' : 'arrivee_colis';
 }
 
+/** The notice that also asks the client's agreement (validate_reception's p_consent_text, 2026-10-29): on Telegram, for
+ * a reception of ONE dossier, { template, text } with template 'arrivee_colis_accord', or 'arrivee_colis_accord_facture'
+ * when the dossier still requests its purchase invoice (the rule of arrivalTemplate). null when it cannot be asked with
+ * the notice (no Telegram, several dossiers). The server decides again (permission, dossier ready, every pending carton
+ * validated, reception task free): otherwise the plain notice leaves and the agreement stays to ask. Same arguments
+ * and same rules as renderArrivalNotice: the saved body first, an unknown variable throws, 4096 characters at most. */
+export function renderConsentNotice({ client, colisList, cartons, destination, settings, bodies } = {}) {
+  if (arrivalChannel(client) !== 'telegram') return null;
+  const dossiers = Array.isArray(colisList) ? colisList.filter(Boolean) : [];
+  if (dossiers.length !== 1) return null;
+  const received = Array.isArray(cartons) ? cartons : [];
+  if (!received.length) throw new Error('Avis d’arrivée : aucun colis à annoncer.');
+  const template = arrivalTemplate(dossiers, client) === 'arrivee_colis_facture' ? 'arrivee_colis_accord_facture' : 'arrivee_colis_accord';
+  const key = `${template}_telegram`;
+  const body = bodies?.[key] ?? DEFAULT_BODIES[key];
+  const text = renderTemplate(body, { client, colis: dossiers[0], destination: destination || {}, settings: settings || {}, reception: { cartons: received } });
+  if (!text.trim()) throw new Error('Le message est vide.');
+  if (text.length > MAX_TEXT) throw new Error(`L’avis avec la demande d’accord compte ${text.length} caractères, ${MAX_TEXT} au plus.`);
+  return { template, text };
+}
+
 /** The notice of one reception: { canal, template, text }, or { canal: null } when the client has neither Telegram nor
  * e-mail. colisList: the reception's dossiers, in the order of validate_reception's items (the first one carries the
  * message and feeds the dossier variables such as {{ref}}). cartons: the reception's cartons ({ number, fournisseur,

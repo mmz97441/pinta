@@ -17,7 +17,8 @@ const bundle = await build({
     "export { renderMessage } from './supabase/functions/_shared/messageTemplate.ts';",
     "export { DEFAULT_BODIES } from './src/expedile/services/messageDefaults.js';",
     "export { DEFAULT_BODIES as SERVER_DEFAULTS } from './supabase/functions/_shared/messageDefaults.ts';",
-    "export { arrivalChannel, arrivalTemplate, renderArrivalNotice } from './src/expedile/services/arrivalNotice.js';",
+    "export { arrivalChannel, arrivalTemplate, renderArrivalNotice, renderConsentNotice } from './src/expedile/services/arrivalNotice.js';",
+    "export { consentButtons } from './supabase/functions/_shared/consentReminders.ts';",
     "export { invoiceRequested } from './supabase/functions/_shared/invoiceRequest.ts';",
     "export { mapClient, mapColis } from './src/expedile/lib/supabaseData.js';",
     "export { DESTINATIONS } from './src/expedile/constants/index.js';",
@@ -27,7 +28,7 @@ const bundle = await build({
     // The Deno HTTP helpers and the browser Supabase client are replaced: nothing here reaches a network.
     builder.onResolve({ filter: /^\.\/http\.ts$/ }, () => ({ path: 'http', namespace: 'message-test' }));
     builder.onResolve({ filter: /^\.\/supabase$/ }, () => ({ path: 'supabase', namespace: 'message-test' }));
-    builder.onLoad({ filter: /^http$/, namespace: 'message-test' }, () => ({ contents: 'export class HttpError extends Error { constructor(status,message) { super(message);this.status=status; } }', loader: 'js' }));
+    builder.onLoad({ filter: /^http$/, namespace: 'message-test' }, () => ({ contents: 'export class HttpError extends Error { constructor(status,message) { super(message);this.status=status; } } export function throwDb(result) { if (result?.error) throw result.error; }', loader: 'js' }));
     builder.onLoad({ filter: /^supabase$/, namespace: 'message-test' }, () => ({ contents: 'export const supabase = null;', loader: 'js' }));
   } }],
 });
@@ -36,11 +37,13 @@ const loaded = { exports: {} };
 // {{lien_espace}}: the browser uses its own origin, the Edge function APP_URL; both are the same application here.
 vm.runInNewContext(bundle.outputFiles[0].text, { module: loaded, exports: loaded.exports, require: createRequire(import.meta.url), console, URL,
   window: { location: { origin: APP } }, Deno: { env: { get: name => (name === 'APP_URL' ? APP : undefined) } } });
-const { renderTemplate, renderMessage, DEFAULT_BODIES, SERVER_DEFAULTS, arrivalChannel, arrivalTemplate, renderArrivalNotice, invoiceRequested, mapClient, mapColis, DESTINATIONS } = loaded.exports;
+const { renderTemplate, renderMessage, DEFAULT_BODIES, SERVER_DEFAULTS, arrivalChannel, arrivalTemplate, renderArrivalNotice, renderConsentNotice, consentButtons, invoiceRequested, mapClient, mapColis, DESTINATIONS } = loaded.exports;
 // Objects built in the module's context: compared as JSON.
 const plain = value => JSON.parse(JSON.stringify(value));
 
 const ARRIVAL_KEYS = ['arrivee_colis_telegram', 'arrivee_colis_email', 'arrivee_colis_facture_telegram', 'arrivee_colis_facture_email'];
+// The notice that also asks the agreement (2026-10-29): Telegram only, right after the four notices.
+const CONSENT_KEYS = ['arrivee_colis_accord_telegram', 'arrivee_colis_accord_facture_telegram'];
 const NEW_VARIABLES = '{{nb_colis_recus}}\n{{liste_colis_recus}}';
 
 // The same client and dossier as each renderer receives them: mapped in the browser, the database rows on the server.
@@ -312,4 +315,89 @@ test('the template editor offers both notices and the two variables, so they can
   // The editor's examples are what the renderers write.
   const example = [{ number: 'LP123456789FR', fournisseur: 'Amazon', dimL: 35.5, dimW: 28, dimH: 18, poids: 2.45 }, { number: 'SH789', fournisseur: 'SHEIN', dimL: 40, dimW: 30, dimH: 20, poids: 1.2 }];
   assert.deepEqual(both(NEW_VARIABLES, { cartons: example }), [`${offered.get('nb_colis_recus')}\n${offered.get('liste_colis_recus')}`, `${offered.get('nb_colis_recus')}\n${offered.get('liste_colis_recus')}`]);
+});
+
+// ── The notice that also asks the agreement (2026-10-29, validate_reception's p_consent_text) ──
+const CONSENT_VARIABLES = ['lien_espace', 'liste_colis_recus', 'nb_cartons', 'nb_colis_recus', 'prenom', 'ref'];
+const consentNotice = (overrides = {}) => renderConsentNotice({ client: browserClient, colisList: [browserColis], cartons: THREE, destination, settings: {}, bodies: {}, ...overrides });
+
+test('the two consent notices: mirrored, after the four notices, plain text, signed, the buttons named as Telegram shows them', () => {
+  const keys = Object.keys(DEFAULT_BODIES);
+  const start = keys.indexOf(ARRIVAL_KEYS[0]);
+  assert.deepEqual(keys.slice(start + 4, start + 6), CONSENT_KEYS, 'Right after the four arrival notices, in this order.');
+  assert.equal(DEFAULT_BODIES.arrivee_colis_accord_email, undefined, 'Telegram only: the buttons need Telegram.');
+  // The labels of the buttons the server attaches (_consent_buttons, consentButtons): the text names them exactly.
+  const labels = consentButtons('colis-1').inline_keyboard.flat().map(button => button.text);
+  assert.deepEqual(plain(labels), ['Autoriser la préparation', 'Attendre mes autres colis', 'Refuser']);
+  for (const key of CONSENT_KEYS) {
+    const body = DEFAULT_BODIES[key];
+    assert.equal(SERVER_DEFAULTS[key], body, `${key}: the Edge copy is the browser's`);
+    assert.deepEqual([...new Set([...body.matchAll(/\{\{(\w+)\}\}/g)].map(match => match[1]))].sort(), CONSENT_VARIABLES, `${key}: only variables known to both renderers`);
+    assert.doesNotMatch(body.replace(/\{\{\w+\}\}/g, ''), /[_*`#[\]]/, `${key}: no Markdown marker outside its variables`);
+    assert.doesNotMatch(body.replace(/\{\{\w+\}\}/g, ''), /\d|€|d[ée]part|livraison|aujourd|demain|bient[ôo]t|\bheures?\b|\bjours?\b|en cours de pr[ée]paration/i, `${key}: no date, price or started preparation`);
+    assert.doesNotMatch(body, /s[ée]curit|rien à faire|seule chose|bon [ée]tat|intact|aucun (probl|souci)|tout va bien/i, `${key}: no claim about the cartons' condition`);
+    // The notice first, word for word: the client reads the same arrival news, then the question.
+    assert.ok(body.startsWith(DEFAULT_BODIES.arrivee_colis_telegram.split('\n\nProchaine étape')[0]), `${key}: the notice of arrivee_colis_telegram, then the question`);
+    assert.match(body, /\n\n🎯 Souhaitez-vous que nous préparions votre envoi \? Touchez « Autoriser la préparation » ci-dessous : notre équipe prépare et optimise vos colis, puis vous recevez le devis\. D’autres achats doivent arriver \? Choisissez « Attendre mes autres colis »\.\n/u, `${key}: the question and the buttons`);
+    // The buttons decide for the whole dossier (its snapshot), not only for the cartons of this reception.
+    assert.match(body, /\nVotre accord vaut pour l’ensemble de votre dossier \{\{ref\}\} \(\{\{nb_cartons\}\} colis au total\)\.\n/, `${key}: the scope of the agreement`);
+    assert.match(body, /\n\nVotre dossier : \{\{lien_espace\}\}\n\nL’équipe Expedîle$/u, `${key}: the dossier online, then the signature`);
+    assert.match(body, /^Bonjour \{\{prenom\}\} 👋\n\n/u, `${key}: greets by first name`);
+    assert.equal(/factures d’achat/.test(body), key === 'arrivee_colis_accord_facture_telegram', `${key}: only the invoice variant asks for the purchase invoices`);
+  }
+  assert.ok(DEFAULT_BODIES.arrivee_colis_accord_facture_telegram.includes('\n\n📄 Pour établir votre devis, nous avons besoin de vos factures d’achat : envoyez-les en réponse à ce message (photos ou PDF) ou déposez-les dans votre espace client.\n\nVotre dossier : '),
+    'A document sent in reply counts as the invoice (register_telegram_document: demande_feu_vert with invoice_requested).');
+});
+
+test('the automatic reminder names the buttons it carries, without a dossier description that may be empty', () => {
+  const body = DEFAULT_BODIES.relance_feu_vert_telegram;
+  assert.equal(SERVER_DEFAULTS.relance_feu_vert_telegram, body);
+  assert.match(body, /« Autoriser la préparation » ci-dessous/);
+  assert.match(body, /« Attendre mes autres colis »/);
+  assert.doesNotMatch(body, /\{\{desc\}\}|OUI|NON|ATTENDRE/, 'The former text named answers no button carries');
+  const [preview, delivered] = both(body);
+  assert.equal(preview, delivered);
+  assert.equal(preview, 'Bonjour Flavie 👋\n\nVotre dossier EXP-ARR001 (3 colis) vous attend à notre entrepôt de Paris. Nous attendons votre accord pour le préparer.\n\n🎯 Touchez « Autoriser la préparation » ci-dessous : notre équipe prépare et optimise votre envoi, puis vous recevez le devis. D’autres achats doivent arriver ? Choisissez « Attendre mes autres colis ».\n\nL’équipe Expedîle');
+});
+
+test('renderConsentNotice: Telegram, one dossier, the invoice rule, the same text as the server would write', () => {
+  const asked = consentNotice();
+  assert.deepEqual(Object.keys(plain(asked)), ['template', 'text']);
+  assert.equal(asked.template, 'arrivee_colis_accord_facture', 'No invoice in the dossier yet');
+  assert.equal(asked.text, renderMessage(SERVER_DEFAULTS.arrivee_colis_accord_facture_telegram, clientRow, colisRow, serverDestination, {}, [], [], { cartons: THREE }));
+  assert.ok(asked.text.includes(`📦 Le détail :\n${THREE_LINES}\n\n🎯 Souhaitez-vous`));
+  assert.ok(asked.text.includes('Votre accord vaut pour l’ensemble de votre dossier EXP-ARR001 (3 colis au total).'));
+  assert.ok(asked.text.endsWith(`Votre dossier : ${APP}/colis/colis-1\n\nL’équipe Expedîle`));
+  // The cartons of this reception and the size of the dossier: one carton added to a dossier of three.
+  const grown = mapColis({ ...colisRow, nb_colis: 4, _factures: [] });
+  assert.match(consentNotice({ colisList: [grown], cartons: THREE.slice(0, 1) }).text, /nous avons reçu 1 colis pour vous[\s\S]+\(4 colis au total\)\./);
+  const invoiced = mapColis({ ...colisRow, _factures: factures(INVOICE_CASES[1][1]) });
+  assert.equal(consentNotice({ colisList: [invoiced] }).template, 'arrivee_colis_accord');
+  assert.doesNotMatch(consentNotice({ colisList: [invoiced] }).text, /facture/);
+  assert.equal(consentNotice({ client: { ...browserClient, type: 'pro' } }).template, 'arrivee_colis_accord', 'Never the invoice for a professional client');
+  // Not asked with the notice: no Telegram, several dossiers.
+  assert.equal(consentNotice({ client: mapClient({ ...clientRow, telegram_chat_id: null }) }), null, 'E-mail: the plain notice');
+  assert.equal(consentNotice({ client: mapClient({ ...clientRow, telegram_chat_id: null, email: null }) }), null);
+  const second = mapColis({ ...colisRow, id: 'colis-2', ref: 'EXP-ARR002', _factures: [] });
+  assert.equal(consentNotice({ colisList: [browserColis, second] }), null, 'Several dossiers: one decision per dossier, the plain notice');
+  assert.equal(consentNotice({ colisList: [] }), null);
+  assert.throws(() => consentNotice({ cartons: [] }), /aucun colis à annoncer/);
+});
+
+test('renderConsentNotice: the saved body first, never replaced when it is invalid, 4096 characters at most', () => {
+  const saved = 'Salut {{prenom}} ! {{nb_colis_recus}} pour {{ref}}. On prépare ?\nL’équipe Expedîle';
+  assert.equal(consentNotice({ bodies: { arrivee_colis_accord_facture_telegram: saved } }).text, 'Salut Flavie ! 3 colis pour EXP-ARR001. On prépare ?\nL’équipe Expedîle');
+  assert.equal(consentNotice({ bodies: { arrivee_colis_accord_telegram: saved } }).text, consentNotice().text, 'The body of the other variant is not used');
+  assert.throws(() => consentNotice({ bodies: { arrivee_colis_accord_facture_telegram: 'Bonjour {{prenom}} {{accord}}' } }), /Variable de message inconnue : accord/);
+  assert.throws(() => consentNotice({ bodies: { arrivee_colis_accord_facture_telegram: '  ' } }), /Le message est vide/);
+  const many = Array.from({ length: 40 }, (_, index) => ({ number: `TRACKING-NUMBER-${String(index).padStart(20, '0')}`, fournisseur: 'Un vendeur au nom assez long', dimL: 100, dimW: 100, dimH: 100, poids: 30 }));
+  assert.throws(() => consentNotice({ cartons: many }), /L’avis avec la demande d’accord compte \d+ caractères, 4096 au plus\./);
+});
+
+test('the template editor offers the consent notices on Telegram only, with every variable they use', () => {
+  const source = readFileSync(new URL('../src/expedile/components/staff/TemplateEditor.jsx', import.meta.url), 'utf8');
+  assert.match(source, /\{ key: 'arrivee_colis_accord', label: 'Avis d’arrivée avec demande d’accord', canals: \['telegram'\]/);
+  assert.match(source, /\{ key: 'arrivee_colis_accord_facture', label: 'Avis d’arrivée avec demande d’accord, facture d’achat à envoyer', canals: \['telegram'\]/);
+  const offered = new Set([...source.matchAll(/\{ key: '(\w+)', label: '[^']*', ex: '[^']*' \}/g)].map(match => match[1]));
+  for (const key of [...CONSENT_KEYS, 'relance_feu_vert_telegram']) for (const [, variable] of DEFAULT_BODIES[key].matchAll(/\{\{(\w+)\}\}/g)) assert.ok(offered.has(variable), `${variable} is offered by the editor`);
 });

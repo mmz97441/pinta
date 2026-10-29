@@ -80,13 +80,19 @@ function listPending(tables, state, clientId) {
       lastCarton: pending[pending.length - 1].carton, cartonCount: pending.length, receivedFrom: pending[0].receivedAt, receivedTo: pending[pending.length - 1].receivedAt, cartons: pending }));
 }
 function validationResult(tables, state, row, reused) {
+  const message = tables.messages.find(item => item.id === row.message_id) || null;
   return { validation: { id: row.id, requestId: row.request_id, clientId: row.client_id, notify: row.notify, canal: row.canal, template: row.template, createdAt: row.created_at, items: row.items, cartons: row.cartons },
-    message: tables.messages.find(message => message.id === row.message_id) || null, outbox: state.outbox.find(item => item.id === row.outbox_id) || null, reused };
+    message, outbox: state.outbox.find(item => item.id === row.outbox_id) || null, consentAsked: message?.template === 'demande_feu_vert', reused };
 }
+// The buttons of a consent request (_consent_buttons): the decision applies to this dossier.
+const consentButtons = colisId => ({ inline_keyboard: [[{ text: 'Autoriser la préparation', callback_data: `fv_oui_${colisId}` }],
+  [{ text: 'Attendre mes autres colis', callback_data: `fv_wait_${colisId}` }, { text: 'Refuser', callback_data: `fv_non_${colisId}` }]] });
+const measuredBox = box => ['dimL', 'dimW', 'dimH', 'poids'].every(key => Number(box?.[key]) > 0);
 function validateReception(tables, state, user, input) {
   if (!allowed(tables, 'perm_colis_receptionner')) return refused(403, '42501', 'Permission réception requise pour valider une réception.');
   if (!input.p_request_id) return refused(400, '22023', 'Identifiant de validation requis.');
-  const payload = JSON.stringify({ clientId: input.p_client_id, items: input.p_items, notify: input.p_notify, canal: input.p_canal ?? null, template: input.p_template ?? null, text: input.p_text ?? null });
+  const payload = JSON.stringify({ clientId: input.p_client_id, items: input.p_items, notify: input.p_notify, canal: input.p_canal ?? null, template: input.p_template ?? null, text: input.p_text ?? null,
+    ...(input.p_consent_text != null ? { consentText: input.p_consent_text } : {}) });
   const recorded = state.validations.find(row => row.request_id === input.p_request_id);
   if (recorded) {
     if (recorded.actor_id !== user.id || recorded.payload !== payload) return refused(409, '40001', 'Cette validation a déjà été enregistrée avec un autre contenu. Actualisez la liste avant de continuer.');
@@ -110,8 +116,10 @@ function validateReception(tables, state, user, input) {
     if (!allowed(tables, channel === 'email' ? 'perm_comm_email' : 'perm_comm_telegram')) return refused(403, '42501', `Permission communication requise pour prévenir le client par ${channel === 'telegram' ? 'Telegram' : 'e-mail'} : validez sans prévenir ou confiez l’avis à un collègue.`);
     if (!['arrivee_colis', 'arrivee_colis_facture'].includes(input.p_template)) return refused(400, '22023', 'Choisissez le modèle de l’avis d’arrivée : arrivee_colis ou arrivee_colis_facture.');
     if (!String(input.p_text || '').trim() || Array.from(input.p_text).length > 4096) return refused(400, '22023', 'Le texte de l’avis d’arrivée doit contenir de 1 à 4096 caractères.');
-  } else if (input.p_canal != null || input.p_template != null || input.p_text != null) return refused(400, '22023', 'Sans avis, ne transmettez ni canal, ni modèle, ni texte.');
+    if (input.p_consent_text != null && (!String(input.p_consent_text).trim() || Array.from(input.p_consent_text).length > 4096)) return refused(400, '22023', 'Le texte de l’avis avec la demande d’accord doit contenir de 1 à 4096 caractères.');
+  } else if (input.p_canal != null || input.p_template != null || input.p_text != null || input.p_consent_text != null) return refused(400, '22023', 'Sans avis, ne transmettez ni canal, ni modèle, ni texte.');
   const items = [], cartons = [];
+  let takesAll = true;
   for (const item of list) {
     const row = tables.colis.find(colis => colis.id === item.colisId);
     if (!row) return refused(400, '22023', 'Dossier introuvable : actualisez la liste.');
@@ -128,6 +136,7 @@ function validateReception(tables, state, user, input) {
     }
     if (!pending.some(carton => carton.carton === item.throughCarton)) return refused(400, '22023', `Le carton n° ${item.throughCarton} du dossier ${row.ref} n’est pas en attente de validation : actualisez la liste.`);
     const selected = pending.filter(carton => carton.carton <= item.throughCarton);
+    if (selected.length !== pending.length) takesAll = false;
     items.push({ colisId: row.id, ref: row.ref, firstCarton: item.fromCarton, lastCarton: item.throughCarton });
     cartons.push(...selected.map(carton => ({ colisId: row.id, ref: row.ref, ...carton })));
   }
@@ -138,10 +147,19 @@ function validateReception(tables, state, user, input) {
     // queue_message(<notice dossier>, text, template, 'arrival:<id>', NULL, canal): « envoi », pending (Telegram) or manual
     // (e-mail). The notice dossier: the first one; for the invoice variant, the first one still requesting its invoice.
     const noticeDossier = (input.p_template === 'arrivee_colis_facture' && items.find(item => invoiceRequested(tables, item.colisId))) || items[0];
-    message = { id: crypto.randomUUID(), colis_id: noticeDossier.colisId, type: 'staff', auteur_nom: 'Camille', texte: input.p_text, statut: 'envoi', canal: channel, template: input.p_template, created_at: now() };
+    // The notice that asks the agreement (20261029000001): one dossier, all its pending cartons, Telegram, the right to
+    // ask it, the dossier measured and not asked yet. queue_message records it as demande_feu_vert with its buttons.
+    const target = tables.colis.find(row => row.id === noticeDossier.colisId);
+    const consent = input.p_consent_text != null && channel === 'telegram' && items.length === 1 && takesAll && allowed(tables, 'perm_colis_demander_feuvert')
+      && ['receptionne', 'mesure'].includes(target.statut) && !target.archive && !target.paiement_date && !state.receptionTaskOfColleague?.has(target.id)
+      && Array.from({ length: cartonCount(target) }, (_, index) => cartonOf(target, index + 1)).every(measuredBox);
+    message = { id: crypto.randomUUID(), colis_id: noticeDossier.colisId, type: 'staff', auteur_nom: 'Camille', texte: consent ? input.p_consent_text : input.p_text, statut: 'envoi', canal: channel,
+      template: consent ? 'demande_feu_vert' : input.p_template, created_at: now() };
     tables.messages.push(message);
-    outbox = { id: crypto.randomUUID(), message_id: message.id, client_id: client.id, colis_id: message.colis_id, canal: channel, status: channel === 'email' ? 'manual' : 'pending', attempts: 0, sent_at: null, last_error: null, idempotency_key: `arrival:${id}` };
+    outbox = { id: crypto.randomUUID(), message_id: message.id, client_id: client.id, colis_id: message.colis_id, canal: channel, status: channel === 'email' ? 'manual' : 'pending', attempts: 0, sent_at: null, last_error: null,
+      idempotency_key: `arrival:${id}`, reply_markup: consent ? consentButtons(target.id) : null };
     state.outbox.push(outbox);
+    if (consent) Object.assign(target, { statut: 'attente_feu_vert', feu_vert: 'en_attente', updated_at: new Date(Math.max(Date.now(), Date.parse(target.updated_at) + 1000)).toISOString() });
   }
   const row = { id, request_id: input.p_request_id, client_id: client.id, actor_id: user.id, notify: input.p_notify, canal: channel, template: input.p_notify ? input.p_template : null,
     message_id: message?.id || null, outbox_id: outbox?.id || null, items, cartons, payload, created_at: now() };
@@ -159,7 +177,7 @@ function listNotices(tables, state, input) {
       const outbox = state.outbox.find(item => item.id === row.outbox_id);
       return { id: row.id, createdAt: row.created_at, clientId: row.client_id, client: { nom: client.nom, prenom: client.prenom }, actor: { nom: 'Camille Test' },
         notify: row.notify, canal: row.canal, template: row.template, items: row.items, cartons: row.cartons,
-        message: message ? { id: message.id, colisId: message.colis_id, statut: message.statut, texte: message.texte, createdAt: message.created_at } : null,
+        message: message ? { id: message.id, colisId: message.colis_id, statut: message.statut, texte: message.texte, createdAt: message.created_at, template: message.template } : null,
         outbox: outbox ? { id: outbox.id, status: outbox.status, attempts: outbox.attempts, sentAt: outbox.sent_at, lastError: outbox.last_error } : null };
     });
 }
@@ -180,6 +198,9 @@ function sendTelegram(tables, state, input) {
   }
   Object.assign(outbox, { status: 'sent', sent_at: now() });
   message.statut = 'envoye';
+  // A consent request delivered: the dossier records when it reached the client (dispatchOutbox).
+  const asked = message.template === 'demande_feu_vert' && tables.colis.find(row => row.id === message.colis_id);
+  if (asked && !asked.demande_feu_vert_envoyee_at) asked.demande_feu_vert_envoyee_at = outbox.sent_at;
   return [200, { ok: true, status: 'sent', messageId: message.id }];
 }
 /** append_reception_cartons: the receipt of a request identifier answers its replay; the cartons are appended once. */
@@ -557,6 +578,8 @@ async function scenario(browser, name, options, run) {
   try {
     await scenario(browser, 'nouveau-client-nouveau-brouillon-deux-cartons-avis-telegram', { layout: TABLET }, async f => {
       const state = fixtures(f);
+      // The automatic reminders as the migration 20261029000001 sets them.
+      f.tables.app_settings[0].value.relancesAccordAuto = { actif: true, depuis: '2026-10-29T06:00:00Z', premiereApresHeures: 48, suivanteApresHeures: 24, nombreMax: 2 };
       await f.login();
       await f.page.goto(`${base}/recevoir`);
       const search = f.page.getByLabel('Nom, téléphone ou numéro client');
@@ -635,7 +658,13 @@ async function scenario(browser, name, options, run) {
       const listed = f.page.getByRole('table', { name: /^Cartons à valider/ });
       assert.match(await rowOf(listed, 'Carton 1').innerText(), /Shein\s+LP00498821\s+45\s×\s32\s×\s20\scm\s+2,4\skg/);
       assert.match(await rowOf(listed, 'Carton 2').innerText(), /Amazon\s+Sans numéro de suivi\s+30\s×\s25\s×\s15\scm\s+1,1\skg/);
-      await f.page.getByText('Flavie recevra un seul message Telegram pour 2 colis.').waitFor();
+      // One dossier, all its cartons, Telegram: the notice also asks the agreement, with its buttons.
+      await f.page.getByText('Flavie recevra un seul message Telegram pour 2 colis, avec les boutons pour autoriser la préparation ou attendre ses autres colis. Sans réponse, une relance part automatiquement 48 h après la demande, puis une seconde 24 h plus tard.').waitFor();
+      await f.page.getByText('Voir le message', { exact: true }).click();
+      const preview = await f.page.locator('.rf-message').first().innerText();
+      assert.match(preview, /🎯 Souhaitez-vous que nous préparions votre envoi \? Touchez « Autoriser la préparation » ci-dessous/u, 'the message shown is the one that leaves');
+      assert.match(preview, /Votre accord vaut pour l’ensemble de votre dossier EXP-\S+ \(2 colis au total\)\./);
+      await f.page.getByText('Voir le message', { exact: true }).click();
       await checkScreen(f, 'step 2 two cartons to validate');
       await snap(f, 'tablette-clair-2c-deux-cartons-a-valider');
 
@@ -660,13 +689,23 @@ async function scenario(browser, name, options, run) {
       assert.match(sent.p_text, /^Bonjour Flavie/);
       assert.match(sent.p_text, /2 colis/);
       assert.match(sent.p_text, /1\. Shein — LP00498821 — 45 × 32 × 20 cm — 2,4 kg\n2\. Amazon — Sans numéro de suivi — 30 × 25 × 15 cm — 1,1 kg/);
+      // The same notice with the question and its buttons: validate_reception sends it instead, as the consent request.
+      assert.ok(sent.p_consent_text.startsWith(sent.p_text.split('\n\nProchaine étape')[0]), 'the same arrival news');
+      assert.match(sent.p_consent_text, /\n\n🎯 Souhaitez-vous que nous préparions votre envoi \?[\s\S]+\(2 colis au total\)\.\n\n📄 Pour établir votre devis, nous avons besoin de vos factures d’achat[\s\S]+\nVotre dossier : http:\/\/127\.0\.0\.1:\d+\/colis\/[0-9a-f-]{36}\n\nL’équipe Expedîle$/u);
       assert.equal(state.validations.length, 1);
       assert.equal(f.tables.messages.length, 1, 'one message for the two cartons');
+      assert.deepEqual({ template: f.tables.messages[0].template, text: f.tables.messages[0].texte, buttons: state.outbox[0].reply_markup.inline_keyboard.flat().map(button => button.callback_data) },
+        { template: 'demande_feu_vert', text: sent.p_consent_text, buttons: [`fv_oui_${dossier.id}`, `fv_wait_${dossier.id}`, `fv_non_${dossier.id}`] }, 'the notice is the consent request of this dossier');
+      assert.equal(dossier.statut, 'attente_feu_vert', 'the dossier waits for its client');
       const deliveries = requestsTo(f, '/functions/v1/send-telegram');
       assert.equal(deliveries.length, 1, 'the Telegram message is delivered at once');
       assert.deepEqual(deliveries[0].input, { colisId: dossier.id, messageId: f.tables.messages[0].id });
       await f.page.getByText('B-07', { exact: true }).waitFor();
       await f.page.getByText('Message Telegram envoyé à Flavie · 2 colis').waitFor();
+      const asked = f.page.getByRole('note').filter({ hasText: 'Accord demandé à Flavie dans le même message' });
+      await asked.waitFor();
+      assert.match(await asked.innerText(), /Avec les boutons du message, Flavie autorise la préparation, attend ses autres colis ou refuse, pour ce dossier\. Sans réponse, une relance part automatiquement 48 h après la demande, puis une seconde 24 h plus tard\./);
+      assert.equal(await f.page.getByText(/reste à demander/).count(), 0);
       await f.page.getByText('Rangez-les dans le casier').waitFor();
       assert.match(await f.page.locator('ol[aria-label="Étapes de la réception"] [aria-current="step"]').innerText(), /^3\s*Rangement$/, 'the third and last step');
       await checkScreen(f, 'step 3 telegram');
@@ -1061,13 +1100,16 @@ async function scenario(browser, name, options, run) {
       f.tables.clients[0].telegram_chat_id = 'chat-camille';
       await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByText(/Le contact du client a changé : l’avis partira par Telegram\. La liste et le contact de Camille sont actualisés/).waitFor();
-      await f.page.getByText('Camille recevra un seul message Telegram pour 1 colis.').waitFor();
+      // On Telegram the notice also asks the agreement (no automatic reminder in these settings: nothing said about it).
+      await f.page.getByText('Camille recevra un seul message Telegram pour 1 colis, avec les boutons pour autoriser la préparation ou attendre ses autres colis.', { exact: true }).waitFor();
       await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
       await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
       const validations = requestsTo(f, '/rpc/validate_reception');
       assert.equal(validations.length, 2);
       assert.notEqual(validations[1].input.p_request_id, validations[0].input.p_request_id, 'a refused request is never replayed');
       assert.equal(validations[1].input.p_canal, 'telegram');
+      assert.equal('p_consent_text' in validations[0].input, false, 'an e-mail notice never asks the agreement');
+      assert.match(validations[1].input.p_consent_text, /« Autoriser la préparation »/);
     });
 
     // The user's screenshot of 2026-10-29: « Could not find the function public.list_pending_receptions(p_client_id) in
@@ -1236,6 +1278,51 @@ async function scenario(browser, name, options, run) {
         await checkScreen(f, `${tag} avis after retry`);
       });
     }
+
+    // Telegram and one dossier, but without the right to ask the agreement: the plain notice, the agreement to ask.
+    await scenario(browser, 'droits-telegram-sans-demande-d-accord', { role: 'preparateur', layout: TABLET }, async f => {
+      fixtures(f, { telegram: true });
+      earlierPendingCarton(f);
+      const permissions = { perm_colis_receptionner: true, perm_comm_telegram: true, perm_colis_demander_feuvert: false };
+      f.tables.staff_users[0].staff_permissions = [permissions];
+      f.tables.staff_permissions = [permissions];
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
+      await f.page.getByText('Camille recevra un seul message Telegram pour 1 colis.', { exact: true }).waitFor();
+      await f.page.getByText('Voir le message', { exact: true }).click();
+      assert.doesNotMatch(await f.page.locator('pre.rf-message').innerText(), /Autoriser la préparation/, 'the message shown is the plain notice');
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
+      await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
+      const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
+      assert.equal('p_consent_text' in sent, false, 'no consent text without the right to ask the agreement');
+      assert.equal(f.tables.messages.at(-1).template, sent.p_template);
+      await f.page.getByRole('note').filter({ hasText: 'L’accord de Camille reste à demander : sa ligne passe à « Accord à demander » dans le Brouillon.' }).waitFor();
+      assert.equal(await f.page.getByText('Accord demandé à Camille dans le même message').count(), 0);
+      await checkScreen(f, 'telegram without the right to ask the agreement, step 3');
+    });
+
+    // The screen proposes the agreement, the server decides otherwise (the reception task followed by a colleague): the
+    // done step says what was really sent.
+    await scenario(browser, 'accord-non-demande-par-le-serveur', { layout: PHONE }, async f => {
+      const state = fixtures(f, { telegram: true });
+      earlierPendingCarton(f);
+      state.receptionTaskOfColleague = new Set([ids.P]);
+      await f.login();
+      await f.page.goto(`${base}/recevoir?client=${ids.C}&valider=1`);
+      await f.page.getByText('Camille recevra un seul message Telegram pour 1 colis, avec les boutons pour autoriser la préparation ou attendre ses autres colis.', { exact: true }).waitFor();
+      await f.page.getByText('Voir le message', { exact: true }).click();
+      const shown = await f.page.locator('pre.rf-message').innerText();
+      assert.match(shown, /Votre accord vaut pour l’ensemble de votre dossier EXP-\S+ \(3 colis au total\)\./, 'one carton received, the agreement for the three of the dossier');
+      assert.match(shown, /nous avons reçu 1 colis pour vous/);
+      await f.page.getByRole('button', { name: 'Valider 1 carton et prévenir Camille', exact: true }).click();
+      await f.page.getByText('Message Telegram envoyé à Camille · 1 colis').waitFor();
+      const sent = requestsTo(f, '/rpc/validate_reception')[0].input;
+      assert.equal(sent.p_consent_text, shown);
+      assert.equal(f.tables.messages.at(-1).template, sent.p_template, 'the plain notice left');
+      assert.equal(f.tables.colis.find(row => row.id === ids.P).statut, 'mesure');
+      await f.page.getByRole('note').filter({ hasText: 'L’accord de Camille reste à demander' }).waitFor();
+      assert.equal(await f.page.getByText('Accord demandé à Camille dans le même message').count(), 0);
+    });
 
     await scenario(browser, 'droits-sans-reception-acces-refuse', { role: 'preparateur', layout: TABLET }, async f => {
       fixtures(f);

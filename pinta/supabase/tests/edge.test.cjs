@@ -59,15 +59,18 @@ test('the reminder worker excludes archived dossiers even when their reminder da
  const response=await run(req({},{authorization:'Bearer scoped-cron-fixture'}));
  assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,0);assert.equal(result.queued,0);
 });
-test('worker never creates a reminder even when historical activation and overdue milestones exist',async()=>{
+test('worker creates no reminder the server does not list as due, whatever the historical activation and overdue milestones',async()=>{
  const client={id:'fixture-client',prenom:'Camille',nom:'Exemple',cp:'97400',type:'particulier',telegram_chat_id:'fixture-chat'};
  const colis={id:'fixture-colis',client_id:client.id,ref:'QA-CARTONS',archive:false,statut:'attente_feu_vert',nb_colis:3,
   demande_feu_vert_envoyee_at:new Date(Date.now()-4*86400000).toISOString(),
   trackings:['SUIVI-A'],trackings_detail:[{number:'SUIVI-A',fournisseur:'Fournisseur A'},{number:'',fournisseur:'Fournisseur B'},{number:'',fournisseur:''}],
   dims_par_colis:Array.from({length:3},()=>({dimL:20,dimW:30,dimH:40,poids:2}))};
  const queued=[];
+ const listed=[];
  const db={rpc:async(name,args)=>{
   if(name==='client_has_open_conversation')return{data:false,error:null};
+  // The server decides what is due (consent_reminders_due): nothing here.
+  if(name==='consent_reminders_due'){listed.push(args);return{data:[],error:null};}
   assert.equal(name,'queue_message');queued.push(args);return{data:{id:'fixture-message'},error:null};
  },from(table){
   assert.ok(['app_settings','colis','clients','notification_outbox','message_templates'].includes(table),`Unexpected table: ${table}`);
@@ -82,7 +85,8 @@ test('worker never creates a reminder even when historical activation and overdu
  }};
  const run=await handler('relances-auto',{db,env:{RELANCES_CRON_SECRET:'scoped-cron-fixture'}});
  const response=await run(req({},{authorization:'Bearer scoped-cron-fixture'}));
- assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,1);assert.equal(result.queued,0);assert.equal(queued.length,0);assert.equal(result.remindersMode,'manual');
+ assert.equal(response.status,200);const result=await response.json();assert.equal(result.scanned,1);assert.equal(result.queued,0);assert.equal(queued.length,0);assert.equal(result.remindersMode,'auto');
+ assert.equal(listed.length,1);assert.match(listed[0].p_now,/^\d{4}-\d{2}-\d{2}T/);assert.deepEqual(result.reminders,{due:0,queued:0,waiting:0,failed:0});
 });
 test('Telegram webhook fails closed when secret is absent or invalid',async()=>{
  assert.equal((await(await handler('telegram-webhook'))(req({update_id:1}))).status,503);

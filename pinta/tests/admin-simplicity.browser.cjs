@@ -15,12 +15,19 @@ await scenario('template-mobile-draft-survives-navigation',async x=>{await go(x,
 // Template labels are plain text with the « accord » vocabulary; a whole default template is readable without an inner
 // scroll bar; the consent confirmations (lot 3b) are listed with when they are sent.
 await scenario('template-labels-plain-and-whole-body-visible',async x=>{await go(x,'/settings?tab=templates');const select=x.page.getByLabel('Message à modifier');await select.waitFor();
- // 20 since the two arrival notices of 2026-10-28 (« Avis d’arrivée », « Avis d’arrivée, facture d’achat à envoyer »).
- const labels=await select.locator('option').allInnerTexts();assert.equal(labels.length,20);
- for(const label of ['Avis d’arrivée','Avis d’arrivée, facture d’achat à envoyer'])assert.ok(labels.some(item=>item.replace(/ · brouillon$/,'')===label),label);
+ // 20 since the two arrival notices of 2026-10-28 (« Avis d’arrivée », « Avis d’arrivée, facture d’achat à envoyer »), 22
+ // with the two that also ask the agreement (2026-10-29), listed first: the message every reception sends.
+ const labels=await select.locator('option').allInnerTexts();assert.equal(labels.length,22);
+ for(const label of ['Avis d’arrivée','Avis d’arrivée, facture d’achat à envoyer','Avis d’arrivée avec demande d’accord','Avis d’arrivée avec demande d’accord, facture d’achat à envoyer'])assert.ok(labels.some(item=>item.replace(/ · brouillon$/,'')===label),label);
+ assert.equal(await select.inputValue(),'arrivee_colis_accord');assert.equal(labels[0].replace(/ · brouillon$/,''),'Avis d’arrivée avec demande d’accord');
+ // Telegram only: its buttons need Telegram.
+ assert.deepEqual(await x.page.getByLabel('Canal').locator('option').allInnerTexts(),['Telegram']);
+ assert.match(await x.page.getByLabel('Texte du message').inputValue(),/Touchez « Autoriser la préparation » ci-dessous/);
  for(const label of labels){assert.doesNotMatch(label,/\p{Extended_Pictographic}/u,`${label}: no emoji`);assert.doesNotMatch(label,/feu vert/i,`${label}: « accord » vocabulary`);}
  for(const label of ['Réception et demande d’accord','Relance de la demande d’accord','Accord enregistré (confirmation au client)','Accord enregistré, facture encore attendue','Choix « attendre d’autres colis » enregistré','Refus de préparation enregistré'])assert.ok(labels.some(item=>item.startsWith(label)),label);
  const field=x.page.getByLabel('Texte du message');const whole=()=>field.evaluate(element=>element.scrollHeight<=element.clientHeight+1);
+ assert.equal(await whole(),true,'the notice with the request is shown whole');await select.selectOption('demande_feu_vert');
+ assert.deepEqual(await x.page.getByLabel('Canal').locator('option').allInnerTexts(),['Telegram','Email'],'both channels for the other templates');
  assert.equal(await whole(),true,'the request template is shown whole');await select.selectOption('devis_final');assert.match(await field.inputValue(),/Réglez votre devis/);assert.equal(await whole(),true,'the longest default is shown whole');
  await select.selectOption('feu_vert_recu_facture');await x.page.getByText(/^Envoyé automatiquement sur Telegram quand le client autorise la préparation alors que sa facture d’achat manque encore/).waitFor();assert.match(await field.inputValue(),/Il nous manque encore votre facture d’achat/);
  await x.page.getByLabel('Canal').selectOption('email');await x.page.getByText(/La version email reste un brouillon : aucun email n’est envoyé automatiquement\./).waitFor();assert.match(await field.inputValue(),/Cordialement,\nL’équipe Expedîle$/);

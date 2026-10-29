@@ -5,16 +5,23 @@ import { useApp } from '../../context/AppContext';
 import { fetchArrivalNotices } from '../../lib/receptionValidation';
 import { receptionCartonManifest } from '../../domain/reception';
 import { colisStage } from '../../domain/brouillon';
+import { autoReminderWording } from '../../domain/consentReminders';
 import { dossierTaskUrl } from '../../domain/dossierTasks';
 import { CONVERSATION_PERMISSIONS, FlaggedCartons, Note, SkeletonRows } from './ReceptionParts';
 import { NoticeCard } from './NoticeStatus';
 import { count, firstName, readableError } from './receptionFlowModel';
 
-// Step 3, « Rangement »: the locker in very large, the cartons of the brouillon, the state of the arrival notice and,
-// when the client had already agreed (or been asked), the reminder that the agreement is to be asked again.
+// Step 3, « Rangement »: the locker in very large, the cartons of the brouillon, the state of the arrival notice, the
+// agreement asked in the same message (or still to ask) and, when the client had already agreed (or been asked), that
+// the agreement is asked again.
 
-function consentReminder(kind, name, before, added, stageLabel) {
+function consentReminder(kind, name, before, added, stageLabel, asked) {
   const news = added > 1 ? `ces ${added} nouveaux cartons` : 'ce nouveau carton';
+  if (asked) {
+    if (kind === 'accord') return `${name} avait donné son accord pour ${count(before, 'carton')}. Avec ${news}, son accord est redemandé dans ce message.`;
+    if (kind === 'devis') return `Le devis de ${name} portait sur ${count(before, 'carton')}. Avec ${news}, son accord est redemandé dans ce message, puis le devis sera à refaire.`;
+    return `L’accord de ${name} avait été demandé pour ${count(before, 'carton')}. Avec ${news}, il est redemandé dans ce message.`;
+  }
   const line = stageLabel ? ` : sa ligne passe à « ${stageLabel} » dans le Brouillon` : '';
   if (kind === 'accord') return `${name} avait donné son accord pour ${count(before, 'carton')}. Pour ${news}, son accord est à redemander${line}.`;
   if (kind === 'devis') return `Le devis de ${name} portait sur ${count(before, 'carton')}. Avec ${news}, l’accord est à redemander et le devis sera à refaire${line}.`;
@@ -59,11 +66,21 @@ export default function RangementStep({ client, session, update, validationId, o
   const lockers = dossiers.map(dossier => ({ dossier, casier: String(dossier.casier || '').trim() }));
   const casiers = [...new Set(lockers.map(item => item.casier).filter(Boolean))];
   const consent = done?.consent || {};
-  const reminders = dossiers.filter(dossier => consent[dossier.id]).map(dossier => {
-    const { kind, cartons: before } = consent[dossier.id];
+  // The notice is the consent request (validate_reception decided it): its buttons decide for its dossier.
+  const consentAsked = notice?.message?.template === 'demande_feu_vert';
+  const autoReminders = autoReminderWording(settings);
+  const reminders = dossiers.map(dossier => {
     const stage = colisStage(dossier, { client, envois, settings, pending: [], can, now: Date.now() });
-    return { id: dossier.id, text: consentReminder(kind, name, before, Math.max(1, receptionCartonManifest(dossier).nbColis - before), stage?.label) };
-  });
+    const asked = consentAsked && notice.message.colisId === dossier.id;
+    if (consent[dossier.id]) {
+      const { kind, cartons: before } = consent[dossier.id];
+      return { id: dossier.id, tone: asked ? 'info' : 'warning', text: consentReminder(kind, name, before, Math.max(1, receptionCartonManifest(dossier).nbColis - before), stage?.label, asked) };
+    }
+    // A dossier whose agreement was not asked with the notice (several dossiers, e-mail, without the right…).
+    return !asked && stage?.key === 'accord_a_demander'
+      ? { id: dossier.id, tone: 'info', text: `L’accord de ${name} reste à demander${dossiers.length > 1 ? ` pour ${dossier.ref}` : ''} : sa ligne passe à « ${stage.label} » dans le Brouillon.` }
+      : null;
+  }).filter(Boolean);
 
   if (!notice) return <section aria-labelledby="rf-step-title" className="mx-auto w-full max-w-3xl space-y-4">
     <h2 id="rf-step-title" ref={headingRef} tabIndex={-1} className="rf-strong text-[26px] font-extrabold outline-none">Réception validée</h2>
@@ -99,8 +116,11 @@ export default function RangementStep({ client, session, update, validationId, o
     </div>
 
     <NoticeCard notice={notice} client={client} delivery={done?.delivery} onChanged={refresh} onRefresh={refresh} refreshing={loading} />
+    {consentAsked && <Note tone="info" role="note" title={`Accord demandé à ${name} dans le même message`}>
+      Avec les boutons du message, {name} autorise la préparation, attend ses autres colis ou refuse, pour ce dossier.{autoReminders ? ` Sans réponse, ${autoReminders}.` : ''}
+    </Note>}
     <FlaggedCartons flagged={done?.flagged} name={name} title={`Pensez à prévenir ${name}`} returnTo={here} canOpen={CONVERSATION_PERMISSIONS.some(can)} notice={notice.notify !== false} />
-    {reminders.map(item => <Note key={item.id} tone="warning" role="note">{item.text}</Note>)}
+    {reminders.map(item => <Note key={item.id} tone={item.tone} role="note">{item.text}</Note>)}
     {done?.rest > 0 && <Note tone="warning" title={`Encore ${count(done.rest, 'carton')} de ${name} à valider`}
       action={<button type="button" className="rf-small-action" onClick={onValidateRest}>Valider les cartons restants</button>}>
       Ils attendent leur validation{notice.notify !== false ? ', avec leur propre avis d’arrivée' : ''}.

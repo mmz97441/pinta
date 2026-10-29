@@ -6,7 +6,8 @@ import { getDestByCP } from '../../constants';
 import { randomId } from '../../lib/randomId';
 import { fetchArrivalNotices, fetchPendingReceptions, pendingValidationItems, receptionCartonsFor, validateReception, MAX_VALIDATION_DOSSIERS } from '../../lib/receptionValidation';
 import { formatDimensions, formatKg, orderValidationItems } from '../../domain/brouillon';
-import { arrivalChannel, renderArrivalNotice } from '../../services/arrivalNotice';
+import { arrivalChannel, renderArrivalNotice, renderConsentNotice } from '../../services/arrivalNotice';
+import { autoReminderWording } from '../../domain/consentReminders';
 import { deliverMessage } from '../../services/telegramApi';
 import { CONVERSATION_PERMISSIONS, FlaggedCartons, Note, SkeletonRows, TableFrame } from './ReceptionParts';
 import { count, definiteRefusal, firstName, notesSayDamaged, parisMoment, readableError, withoutRefreshAdvice } from './receptionFlowModel';
@@ -16,8 +17,10 @@ import { refreshClientRecord } from './receptionData';
 // cartons of this reception and the client's other cartons waiting for their validation (list_pending_receptions, read
 // again after each carton added), then « Valider N cartons et prévenir [prénom] » in one tap: the notice is rendered
 // (renderArrivalNotice), validate_reception records the validation and queues ONE message for every carton, and a
-// Telegram message is delivered at once. The request keeps its identifier until the server has answered: after a lost
-// answer the same request is replayed and the server returns what it recorded (nothing is sent twice).
+// Telegram message is delivered at once. On Telegram, for a reception of one dossier, that message also asks the
+// client's agreement (renderConsentNotice, its buttons; the server decides). The request keeps its identifier until
+// the server has answered: after a lost answer the same request is replayed and the server returns what it recorded
+// (nothing is sent twice).
 const MAX_CARTONS = 100;
 
 /**
@@ -143,6 +146,24 @@ export default function ValidationPanel({ client, session, update, version = 0, 
   const cartons = useMemo(() => batch.items.length ? receptionCartonsFor(pending, batch.items) : [], [pending, batch]);
   const notice = batch.notice || { value: null, error: '' };
   const canNotify = Boolean(channel && allowed && notice.value?.canal && !notice.error);
+  // The agreement asked with the notice (validate_reception's p_consent_text): Telegram, one dossier whose every pending
+  // carton this validation takes, a dossier measured and not yet asked, and the right to ask it. The server checks it
+  // all again; otherwise the plain notice leaves and the agreement stays to ask.
+  const askConsent = can('perm_colis_demander_feuvert');
+  const consent = useMemo(() => {
+    if (!canNotify || channel !== 'telegram' || !askConsent || batch.items.length !== 1) return null;
+    const [item] = batch.items;
+    const row = (pending || []).find(entry => entry.colisId === item.colisId);
+    if (!row || row.lastCarton !== item.throughCarton) return null;
+    const dossier = data.find(entry => entry.id === item.colisId);
+    if (dossier && (!['receptionne', 'mesure'].includes(dossier.statut) || dossier.archive || dossier.paiementDate)) return null;
+    try {
+      const value = renderConsentNotice({ client, colisList: [dossier || { id: item.colisId, ref: row.ref, factures: [] }], cartons,
+        destination: getDestByCP(client.cp), settings, bodies: messageTemplates });
+      return value ? { value, error: '' } : null;
+    } catch (error) { return { value: null, error: error.message || 'Le modèle n’a pas pu être utilisé.' }; }
+  }, [canNotify, channel, askConsent, batch.items, pending, data, client, cartons, settings, messageTemplates]);
+  const reminders = autoReminderWording(settings);
   const savedKeys = new Set(session.saved.map(item => `${item.colisId}:${item.number}`));
   const blockedBy = session.validation ? 'validation' : session.intent ? 'intent' : null;
   const severalDossiers = new Set(cartons.map(carton => carton.colisId)).size > 1;
@@ -195,6 +216,9 @@ export default function ValidationPanel({ client, session, update, version = 0, 
       try { delivery = await deliverMessage(message.colisId || recorded.items[0]?.colisId, message.id); }
       catch (error) { delivery = { ok: false, error: readableError(error, 'réseau indisponible', 'Réception · envoi Telegram') }; }
     }
+    // The dossiers as the server has them now: the agreement asked moves the dossier to « Attend le client », the
+    // notice is among its messages.
+    await Promise.all(recorded.items.map(item => refreshColis(item.colisId).catch(() => null)));
     // The notice as the server has it now (Telegram confirmed, e-mail to send…); otherwise what is known.
     let listed = null;
     try { listed = (await fetchArrivalNotices({ clientId: client.id, limit: 20 })).find(item => item.id === recorded.id) || null; }
@@ -216,7 +240,8 @@ export default function ValidationPanel({ client, session, update, version = 0, 
   const start = notify => {
     if (busyRef.current || !ready || (notify && !canNotify)) return;
     const args = notify
-      ? { clientId: client.id, items: batch.items, notify: true, canal: notice.value.canal, template: notice.value.template, text: notice.value.text, requestId: randomId() }
+      ? { clientId: client.id, items: batch.items, notify: true, canal: notice.value.canal, template: notice.value.template, text: notice.value.text, requestId: randomId(),
+        ...(consent?.value ? { consentText: consent.value.text } : {}) }
       : { clientId: client.id, items: batch.items, notify: false, requestId: randomId() };
     const validation = { args, rest: batch.rest, flagged };
     // Kept before the call: a lost answer is replayed with this very request.
@@ -236,7 +261,9 @@ export default function ValidationPanel({ client, session, update, version = 0, 
     : !allowed ? `Votre accès ne permet pas de prévenir ${name} par ${channel === 'telegram' ? 'Telegram' : 'e-mail'} : validez sans prévenir, ou demandez à un collègue autorisé de valider la réception.`
       : notice.error ? `L’avis d’arrivée n’a pas pu être préparé : ${String(notice.error).replace(/[.\s]+$/, '')}. Corrigez le modèle « Avis d’arrivée » dans Paramètres, ou validez sans prévenir.` : null;
   const explanation = channel === 'telegram'
-    ? `${name} recevra un seul message Telegram pour ${count(cartons.length, 'colis', 'colis')}.`
+    ? consent?.value
+      ? `${name} recevra un seul message Telegram pour ${count(cartons.length, 'colis', 'colis')}, avec les boutons pour autoriser la préparation ou attendre ses autres colis.${reminders ? ` Sans réponse, ${reminders}.` : ''}`
+      : `${name} recevra un seul message Telegram pour ${count(cartons.length, 'colis', 'colis')}.`
     : `L’e-mail pour ${name} sera préparé pour ${count(cartons.length, 'colis', 'colis')} : vous le copierez pour l’envoyer depuis votre messagerie (l’envoi automatique des e-mails n’est pas encore branché).`;
   const rest = batch.reason === 'text'
     ? `Encore ${count(batch.rest, 'carton')} à valider ensuite : un avis d’arrivée ne peut pas en annoncer davantage en un seul message. Validez-les juste après celle-ci, avec un second avis.`
@@ -295,9 +322,10 @@ export default function ValidationPanel({ client, session, update, version = 0, 
       </Note>
       : <>
         {canNotify ? <Note tone="info">{explanation}</Note> : <Note tone="warning">{reason}</Note>}
+        {canNotify && consent?.error && <Note tone="warning" role="note">L’avis avec la demande d’accord n’a pas pu être préparé : {String(consent.error).replace(/[.\s]+$/, '')}. L’avis d’arrivée partira seul et l’accord restera à demander. Corrigez le modèle «&nbsp;Avis d’arrivée avec demande d’accord&nbsp;» dans Paramètres.</Note>}
         {canNotify && notice.value?.text && <details className="rf-card rounded-2xl px-4">
           <summary className="rf-strong min-h-11 cursor-pointer py-3 text-[16px] font-semibold">Voir le message</summary>
-          <pre className="rf-message pb-4">{notice.value.text}</pre>
+          <pre className="rf-message pb-4">{consent?.value?.text || notice.value.text}</pre>
         </details>}
         <div className="flex flex-col items-stretch gap-1">
           {canNotify
