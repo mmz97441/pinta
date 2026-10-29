@@ -6,18 +6,20 @@
 --    colis sont arrivés… » and the buttons « Autoriser la préparation », « Attendre mes autres colis », « Refuser »). It
 --    is an ordinary consent request (template demande_feu_vert, queued by queue_message with its snapshot of the
 --    cartons, its consent version and its buttons): the Telegram decision, its confirmation, the 24-hour follow-up and
---    the team's tasks work as for « Demander l’accord ». Otherwise (several dossiers, a carton of the dossier left for a next validation, e-mail, no
---    permission, a dossier not ready, the reception task held by a colleague) the plain notice leaves as before and the
---    consent stays to ask.
+--    the team's tasks work as for « Demander l’accord ». Otherwise (several dossiers, a carton of the dossier left for
+--    a next validation, e-mail, no permission, a dossier not ready, the reception task held by a colleague) the plain
+--    notice leaves as before and the consent stays to ask.
 -- 2. Reminders leave on their own: 48 hours after the request reached the client, then 24 hours after the first
 --    reminder, at most two (app_settings.business.relancesAccordAuto), Telegram only, for the requests delivered since
 --    this migration (never a reminder of the history). consent_reminders_due lists them for the scheduled worker
 --    (relances-auto), which renders the saved « relance_feu_vert » text and queues it with queue_message; the existing
 --    rules still hold at sending: one reminder per client in 24 hours, none while the client's conversation waits for
 --    the team, none for a request replaced or answered meanwhile. A relance sent by the team counts as one.
--- validate_reception gains p_consent_text (DROP and CREATE: an added parameter; the screens already deployed call it
--- with named arguments and keep working). Nothing else is redefined but the two read helpers of the validation
--- (_reception_validation_result: consentAsked; list_arrival_notices: the message's template). No trigger is added.
+-- validate_reception gains p_consent_text: an added parameter, so a new function; the screens already deployed call it
+-- with named arguments and keep working. The former version is not dropped: renamed validate_reception_20261028 and
+-- executable by nobody, so that a call finds one validate_reception only (nothing is deleted from the production
+-- database). Nothing else is redefined but the two read helpers of the validation (_reception_validation_result:
+-- consentAsked; list_arrival_notices: the message's template). No trigger is added.
 
 -- ── Settings: on, 48 hours then 24 hours, two reminders, for the requests delivered from now ──
 UPDATE public.app_settings
@@ -75,7 +77,8 @@ $$;
 -- not followed by a colleague, the dossier measured (receptionne or mesure, every carton measured), not archived nor
 -- paid: queue_message records it as the consent request (template demande_feu_vert, its buttons, the dossier's consent
 -- version) and the dossier waits for the client (attente_feu_vert). Otherwise the plain notice leaves, as before.
-DROP FUNCTION public.validate_reception(uuid,jsonb,boolean,text,text,text,uuid);
+ALTER FUNCTION public.validate_reception(uuid,jsonb,boolean,text,text,text,uuid) RENAME TO validate_reception_20261028;
+REVOKE ALL ON FUNCTION public.validate_reception_20261028(uuid,jsonb,boolean,text,text,text,uuid) FROM PUBLIC,anon,authenticated,service_role;
 CREATE FUNCTION public.validate_reception(
  p_client_id uuid,p_items jsonb,p_notify boolean,p_canal text DEFAULT NULL,p_template text DEFAULT NULL,
  p_text text DEFAULT NULL,p_request_id uuid DEFAULT gen_random_uuid(),p_consent_text text DEFAULT NULL

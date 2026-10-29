@@ -1,10 +1,11 @@
 -- Automatic client consent (20261029000001_consent_automation.sql). Run by run-consent-automation.sh after every
--- migration, with Supabase's default privileges. Checked: the shape (settings, private helpers, grants); the notice
--- that asks the agreement (one message, the buttons of its dossier, the consent machinery of « Demander l’accord »);
--- its replay; every case where the plain notice leaves instead (several dossiers, e-mail, no permission, the reception
--- task followed by a colleague, a dossier not measured, a carton of the dossier left for a next validation); the refusals; the reminders due (48 hours, then 24 hours, two
--- at most, a relance of the team counting, nothing for the history, a voluntary wait, a delivery in progress or
--- failed, an open conversation, an e-mail client, a replaced request, settings off or unreadable).
+-- migration, with Supabase's default privileges. Checked: the shape (settings, private helpers, grants, the former
+-- validate_reception renamed and closed); the notice that asks the agreement (one message, the buttons of its dossier,
+-- the consent machinery of « Demander l’accord »); its replay; every case where the plain notice leaves instead
+-- (several dossiers, e-mail, no permission, the reception task followed by a colleague, a dossier not measured, a
+-- carton of the dossier left for a next validation); the refusals; the reminders due (48 hours, then 24 hours, two at
+-- most, a relance of the team counting, nothing for the history, a voluntary wait, a delivery in progress or failed,
+-- an open conversation, an e-mail client, a replaced request, settings off or unreadable).
 BEGIN;
 GRANT USAGE ON SCHEMA public,auth TO anon,authenticated,service_role;
 CREATE FUNCTION ca_assert(ok boolean,label text) RETURNS void LANGUAGE plpgsql AS $$
@@ -70,6 +71,13 @@ BEGIN
   OR has_function_privilege('anon','validate_reception(uuid,jsonb,boolean,text,text,text,uuid,text)','EXECUTE')
   OR to_regprocedure('validate_reception(uuid,jsonb,boolean,text,text,text,uuid)') IS NOT NULL THEN
   RAISE EXCEPTION 'FAIL: grants of the commands'; END IF;
+ -- The former version is kept, renamed, and nobody may call it (nothing is dropped from the production database).
+ IF to_regprocedure('validate_reception_20261028(uuid,jsonb,boolean,text,text,text,uuid)') IS NULL
+  OR has_function_privilege('anon','validate_reception_20261028(uuid,jsonb,boolean,text,text,text,uuid)','EXECUTE')
+  OR has_function_privilege('authenticated','validate_reception_20261028(uuid,jsonb,boolean,text,text,text,uuid)','EXECUTE')
+  OR has_function_privilege('service_role','validate_reception_20261028(uuid,jsonb,boolean,text,text,text,uuid)','EXECUTE')
+  OR (SELECT count(*) FROM pg_proc WHERE proname='validate_reception' AND pronamespace='public'::regnamespace)<>1 THEN
+  RAISE EXCEPTION 'FAIL: the former validate_reception, renamed and closed'; END IF;
  IF EXISTS(SELECT 1 FROM pg_trigger t WHERE t.tgrelid IN ('messages'::regclass,'notification_outbox'::regclass,'colis'::regclass) AND t.tgname LIKE '%consent_automation%') THEN
   RAISE EXCEPTION 'FAIL: no trigger added'; END IF;
  RAISE NOTICE 'PASS: C1 settings on (48 h, 24 h, two reminders, from now), private helpers, the reminders for the scheduled worker only, validate_reception with p_consent_text';
