@@ -217,7 +217,8 @@ a.colis-alert:hover { border-color: var(--attention-text); }
 .colis-strong { font-size: 15px; font-weight: 600; color: var(--colis-text); }
 /* The dimensions under the cartons' weight and volume: one carton (or one parcel to ship) per line. */
 .colis-dims { display: block; margin-top: 3px; }
-.colis-dim-line { display: block; font-size: 15px; font-weight: 400; line-height: 1.35; color: var(--colis-text); }
+/* One carton, one line: « 30 × 20 × 20 cm » never breaks (the column takes its width, the table frame scrolls). */
+.colis-dim-line { display: block; font-size: 15px; font-weight: 400; line-height: 1.35; color: var(--colis-text); white-space: nowrap; }
 .colis-dim-line[data-missing='true'] { color: var(--colis-muted); }
 .colis-dims-caption { display: block; font-size: 15px; line-height: 1.35; color: var(--colis-muted); }
 /* A line found by a number: which one (« Suivi … · carton 2 », « Départ ENV-… »). */

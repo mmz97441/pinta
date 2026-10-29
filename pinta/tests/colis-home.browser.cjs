@@ -530,7 +530,10 @@ async function main() {
       await sorts.locator('button[aria-pressed="true"]', { hasText: 'Par destination' }).waitFor();
       await tabs(f).getByRole('link', { name: /^À payer/ }).click();
       await f.page.waitForURL(url => url.searchParams.get('onglet') === 'a_payer' && url.searchParams.get('classer') === 'destination');
-      await f.page.locator('.colis-group-row', { hasText: 'Réunion' }).waitFor();
+      // The tab's own line first (the Brouillon groups may still be on screen a moment), then its one group.
+      await rowOf(f, D.lebon).waitFor();
+      await f.page.waitForFunction(() => document.querySelectorAll('.colis-group-row').length === 1);
+      assert.match(await flat(f.page.locator('.colis-group-row')), /^Réunion/);
       // A phone: the menu offers it, the table groups the same way, the page never scrolls sideways.
       await f.page.setViewportSize({ width: 390, height: 844 });
       await openHome(f, '?classer=destination');
